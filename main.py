@@ -1,6 +1,6 @@
 import sys
 from src.fetcher import fetch_metar
-from src.agent import analyze_metar_with_gemini
+from src.agent import analyze_metar_orchestrator
 
 def main():
     # Use VECC (Kolkata) as default, or accept an airport via command line
@@ -15,11 +15,15 @@ def main():
         
     print(f"📝 Raw Data: {raw_data}\n")
     
-    print("🤖 Processing with Gemini...")
-    analysis_result = analyze_metar_with_gemini(raw_data)
+    print("🤖 Processing with AI...")
+    analysis_result = analyze_metar_orchestrator(raw_data)
     
     print("\n📋 Final Structured Result:")
-    print(analysis_result)
+    
+    # This automatically splits the long single line into a beautiful, readable format
+    import json
+    readable_json = json.dumps(json.loads(analysis_result), indent=4)
+    print(readable_json)
 
 if __name__ == "__main__":
     main()
