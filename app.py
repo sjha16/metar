@@ -664,7 +664,7 @@ def show_high_traffic_mode():
 def main():
     """Main application entry point"""
     
-    with streamlit_analytics.track(data_file="weather_analytics.json"):
+    with streamlit_analytics.track(load_from_json="weather_analytics.json", save_to_json="weather_analytics.json"):
         # Render sidebar
         render_sidebar()
         
