@@ -32,6 +32,7 @@ load_dotenv(dotenv_path=env_path)
 
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
+DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY")
 
 
 def validate_environment() -> bool:
@@ -42,6 +43,8 @@ def validate_environment() -> bool:
         missing.append("GEMINI_API_KEY")
     if not GROQ_KEY:
         missing.append("GROQ_API_KEY")
+    if not DEEPSEEK_KEY:
+        missing.append("DEEPSEEK_API_KEY")
     
     if missing:
         print(f"⚠️ Missing API keys: {', '.join(missing)}")
@@ -54,6 +57,9 @@ def validate_environment() -> bool:
     
     if GROQ_KEY and not GROQ_KEY.startswith("gsk_"):
         print("⚠️ Groq API key format looks unusual (expected starting with 'gsk_')")
+        
+    if DEEPSEEK_KEY and not DEEPSEEK_KEY.startswith("sk-"):
+        print("⚠️ DeepSeek API key format looks unusual (expected starting with 'sk-')")
     
     return True
 
@@ -201,6 +207,7 @@ class RateLimiter:
             self.cache_file = cache_file
             
         self.limits = {
+            "deepseek": {"max_rpm": 50, "min_spacing": 0.5},
             "gemini": {"max_rpm": 14, "min_spacing": 4.0}, # 4.0s spacing ensures max 15 RPM globally
             "groq": {"max_rpm": 28, "min_spacing": 2.0}    # 2.0s spacing ensures max 30 RPM globally
         }
@@ -209,7 +216,7 @@ class RateLimiter:
     def _init_cache(self):
         """Ensure the rate limit cache file exists and is valid"""
         if not self.cache_file.exists():
-            self._write_state({"gemini": [], "groq": []})
+            self._write_state({"deepseek": [], "gemini": [], "groq": []})
 
     def _read_state(self) -> Dict[str, list]:
         try:
@@ -217,7 +224,7 @@ class RateLimiter:
                 return json.loads(self.cache_file.read_text(encoding='utf-8'))
         except Exception:
             pass
-        return {"gemini": [], "groq": []}
+        return {"deepseek": [], "gemini": [], "groq": []}
 
     def _write_state(self, state: Dict[str, list]):
         try:
@@ -273,7 +280,7 @@ class RateLimiter:
         stats = {}
         providers_avail = {}
         
-        for provider in ["gemini", "groq"]:
+        for provider in ["deepseek", "gemini", "groq"]:
             timestamps = state.get(provider, [])
             timestamps = [t for t in timestamps if now - t < 60]
             stats[provider] = len(timestamps)
@@ -286,9 +293,16 @@ class RateLimiter:
                 avail = False
             providers_avail[provider] = avail
             
+        # Determine reset based on oldest timestamp across active providers
+        oldest_ts = now
+        for provider in ["deepseek", "gemini", "groq"]:
+            ts_list = state.get(provider, [])
+            if ts_list:
+                oldest_ts = min(oldest_ts, ts_list[0])
+            
         return {
             "calls_this_minute": stats,
-            "seconds_until_reset": max(0, int(60 - (now - state.get("gemini", [now])[0]))) if state.get("gemini") else 0,
+            "seconds_until_reset": max(0, int(60 - (now - oldest_ts))),
             "providers_available": providers_avail
         }
 
@@ -425,6 +439,84 @@ def _call_groq(combined_content: str) -> Optional[str]:
         
     except Exception as e:
         print(f"⚠️ Groq error: {str(e)[:150]}")
+        raise
+
+
+def _call_deepseek(combined_content: str) -> Optional[str]:
+    """
+    Call DeepSeek API for METAR analysis.
+    DeepSeek is OpenAI-compatible!
+    """
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(
+            api_key=DEEPSEEK_KEY,
+            base_url="https://api.deepseek.com"
+        )
+        
+        prompt = f"""You are an aviation weather analyst. Analyze this data and return ONLY a valid JSON object.
+
+WEATHER DATA:
+{combined_content}
+
+REQUIRED JSON FIELDS (return all of them):
+{{
+    "station": "4-letter ICAO code",
+    "time_of_observation": "observation time in plain English",
+    "surface_wind": "wind description in plain English",
+    "visibility": "visibility in plain English",
+    "clouds": "cloud conditions in plain English",
+    "temperature_dew_point": "temperature and dew point in plain English",
+    "qnh": "altimeter setting in plain English",
+    "flight_category": "VFR, MVFR, IFR, or LIFR",
+    "forecast_trend": "TAF summary or 'No TAF available'",
+    "flight_recommendation": "Go/No-Go for student pilot with reasoning",
+    "educational_insights": "teaching points from this weather",
+    "pertinent_information": "critical ATC notes"
+}}
+
+CRITICAL RULES:
+{SYSTEM_INSTRUCTION}
+
+Return ONLY the JSON object, no other text."""
+        
+        response = client.chat.completions.create(
+            model="deepseek-chat",  # DeepSeek-V3
+            messages=[
+                {"role": "system", "content": "You are a JSON-only API. Return only valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,
+            max_tokens=1500,
+            response_format={"type": "json_object"}  # DeepSeek supports this!
+        )
+        
+        content = response.choices[0].message.content
+        
+        # Validate it's actual JSON
+        if content:
+            try:
+                json.loads(content)
+                return content
+            except json.JSONDecodeError:
+                # Try to extract JSON if DeepSeek added extra text
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    extracted = json_match.group()
+                    try:
+                        json.loads(extracted)
+                        print("⚠️ Extracted JSON from DeepSeek response (had extra text)")
+                        return extracted
+                    except:
+                        pass
+                print("⚠️ DeepSeek returned invalid JSON")
+                return None
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ DeepSeek error: {str(e)[:150]}")
         raise
 
 
@@ -672,7 +764,31 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
     print(f"   METAR: {raw_metar[:80]}...")
     print(f"   TAF: {raw_taf[:80] if raw_taf else 'None'}...")
     
-    # === ATTEMPT 1: Gemini ===
+    # === ATTEMPT 1: DeepSeek ===
+    if DEEPSEEK_KEY and rate_limiter.can_call("deepseek"):
+        try:
+            print("🚀 Attempting analysis with DeepSeek...")
+            result = _call_deepseek(combined_content)
+            rate_limiter.record_call("deepseek")
+            
+            if result:
+                print("✅ DeepSeek analysis successful")
+                response = _validate_and_parse(result, "deepseek")
+                response["rate_limit_stats"] = rate_limiter.get_stats()
+                return response
+            else:
+                print("⚠️ DeepSeek returned no usable result")
+                
+        except Exception as e:
+            error_msg = str(e)[:100]
+            print(f"⚠️ DeepSeek failed: {error_msg}")
+    else:
+        if not DEEPSEEK_KEY:
+            print("⚠️ DeepSeek API key not configured")
+        elif not rate_limiter.can_call("deepseek"):
+            print("⚠️ DeepSeek rate limit reached, skipping to fallback")
+
+    # === ATTEMPT 2: Gemini ===
     if GEMINI_KEY and rate_limiter.can_call("gemini"):
         try:
             print("🤖 Attempting analysis with Gemini 2.5 Flash...")
@@ -683,6 +799,7 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
                 print("✅ Gemini analysis successful")
                 response = _validate_and_parse(result, "gemini")
                 response["rate_limit_stats"] = rate_limiter.get_stats()
+                response["fallback_used"] = True
                 return response
             else:
                 print("⚠️ Gemini returned no usable result")
@@ -690,14 +807,13 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
         except Exception as e:
             error_msg = str(e)[:100]
             print(f"⚠️ Gemini failed: {error_msg}")
-            # Don't record failed calls
     else:
         if not GEMINI_KEY:
             print("⚠️ Gemini API key not configured")
         elif not rate_limiter.can_call("gemini"):
             print("⚠️ Gemini rate limit reached, skipping to fallback")
     
-    # === ATTEMPT 2: Groq ===
+    # === ATTEMPT 3: Groq ===
     if GROQ_KEY and rate_limiter.can_call("groq"):
         try:
             print("🔄 Attempting analysis with Groq (Llama 3.3)...")
@@ -722,7 +838,7 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
         elif not rate_limiter.can_call("groq"):
             print("⚠️ Groq rate limit reached")
     
-    # === ATTEMPT 3: Ultimate Fallback ===
+    # === ATTEMPT 4: Ultimate Fallback ===
     print("⚠️ All AI providers unavailable. Using basic regex parser...")
     response = _basic_metar_parse(raw_metar, raw_taf)
     response["rate_limit_stats"] = rate_limiter.get_stats()
@@ -756,8 +872,10 @@ def cached_analyze_metar(metar: str, taf: str = "") -> str:
 def get_ai_status() -> Dict[str, Any]:
     """Get current status of all AI providers"""
     return {
+        "deepseek_configured": bool(DEEPSEEK_KEY),
         "gemini_configured": bool(GEMINI_KEY),
         "groq_configured": bool(GROQ_KEY),
+        "deepseek_available": bool(DEEPSEEK_KEY and rate_limiter.can_call("deepseek")),
         "gemini_available": bool(GEMINI_KEY and rate_limiter.can_call("gemini")),
         "groq_available": bool(GROQ_KEY and rate_limiter.can_call("groq")),
         "rate_limits": rate_limiter.get_stats(),

@@ -1,6 +1,7 @@
 streamlit
 google-genai
 groq
+openai
 pydantic
 requests
 python-dotenv

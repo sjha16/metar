@@ -86,14 +86,20 @@ def render_sidebar():
         st.markdown("#### 🤖 AI Engine Status")
         ai_status = get_ai_status()
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
+            if ai_status.get("deepseek_available"):
+                st.success("DSeek ✅")
+            else:
+                st.error("DSeek ❌")
+        
+        with col2:
             if ai_status.get("gemini_available"):
                 st.success("Gemini ✅")
             else:
                 st.error("Gemini ❌")
         
-        with col2:
+        with col3:
             if ai_status.get("groq_available"):
                 st.success("Groq ✅")
             else:
@@ -431,6 +437,7 @@ def display_analysis_results():
     fallback = analysis.get("fallback_used", False)
     
     provider_color = {
+        "deepseek": "#0066FF",
         "gemini": "#4285F4",
         "groq": "#F50057",
         "regex_parser": "#FF9800"
