@@ -124,7 +124,7 @@ class METARAnalysis(BaseModel):
     )
     
     pertinent_information: str = Field(
-        description="Critical ATC takeaways (e.g., 'Wind shear reported on final approach', 'ILS approaches required', 'Runway 27 likely in use', 'TEMPO hazards exist')"
+        description="Critical ATC takeaways (e.g., 'Wind shear reported on final approach', 'ILS approaches required', 'Runway 01R likely in use', 'TEMPO hazards exist'). STRICT RULE: Never name specific active runway numbers unless they are explicitly present in the provided list of actual runways for the airport. If the list is unavailable, state only general wind alignment (e.g., 'wind favors runways aligned with the southeast') or omit naming active runways entirely."
     )
 
 
@@ -177,7 +177,8 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
 
 4. PERTINENT ATC INFORMATION:
    - Note anything requiring Air Traffic Controller attention
-   - Identify likely active runway based on wind direction
+   - Identify likely active runway based on wind direction ONLY if the actual runway list of the airport is provided in the prompt. Match the current wind direction with one of the actual runways.
+   - STRICT RUNWAY RULE: If no runway list is provided, or the list is empty/unavailable, you MUST NOT guess, invent, or state specific runway numbers (e.g. do not say "Runway 14 is likely active" just because the wind is 140 degrees). Instead, state only the general wind alignment orientation (e.g., "Wind favors runways aligned with the southeast") or omit naming an active runway entirely.
    - Flag any SPECI (special weather report) conditions
    - Note if instrument approaches (ILS, RNAV) would be required
    - Identify any NOTAM-worthy conditions
@@ -469,6 +470,8 @@ Output this JSON structure (replace values with your analysis):
   "pertinent_information": "important ATC operational notes"
 }}
 
+CRITICAL RUNWAY RULE: Never name specific active runway numbers (e.g. do not suggest Runway 22) unless they are explicitly present in the provided list of actual runways for the airport. If the list is unavailable, empty, or does not contain such runways, state only the general wind alignment (e.g., 'wind favors runways aligned with the southwest') or omit naming active runways entirely. Match the current wind against the actual runways if they are provided.
+
 CRITICAL: Output ONLY the JSON object. No other text."""
                 }
             ],
@@ -744,7 +747,26 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "", use_cache: boo
     
     raw_metar = raw_metar.strip().upper()
     raw_taf = raw_taf.strip().upper() if raw_taf else "NO TAF AVAILABLE"
-    combined_content = f"Raw METAR string: {raw_metar}\nRaw TAF block: {raw_taf}"
+    
+    # Fetch airport metadata (runway information)
+    runways_text = "No runway information available for this airport."
+    try:
+        from src.fetcher import fetch_airport_info
+        airport_info = fetch_airport_info(icao)
+        if airport_info and "runways" in airport_info:
+            runways = airport_info["runways"]
+            if runways:
+                runways_formatted = []
+                for rwy in runways:
+                    rwy_id = rwy.get("id", "Unknown")
+                    rwy_dim = rwy.get("dimension", "Unknown")
+                    rwy_surf = rwy.get("surface", "Unknown")
+                    runways_formatted.append(f"- Runway {rwy_id} (Dimension: {rwy_dim}, Surface: {rwy_surf})")
+                runways_text = "Actual Airport Runways:\n" + "\n".join(runways_formatted)
+    except Exception as e:
+        print(f"⚠️ Failed to fetch/parse runway info: {e}")
+        
+    combined_content = f"Raw METAR string: {raw_metar}\nRaw TAF block: {raw_taf}\n\n{runways_text}"
     
     print(f"🛫 Analyzing weather data for {icao}...")
     print(f"   METAR: {raw_metar[:80]}...")

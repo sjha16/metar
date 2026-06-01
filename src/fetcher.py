@@ -21,3 +21,20 @@ def fetch_taf(icao: str) -> str:
         return f"Error: Could not find TAF data for {icao}."
     except Exception as e:
         return f"Exception occurred fetching TAF: {str(e)}"
+
+def fetch_airport_info(icao: str) -> dict:
+    """Fetches airport metadata including runways from AWC API."""
+    url = f"https://aviationweather.gov/api/data/airport?ids={icao.upper()}&format=json"
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if isinstance(data, list) and len(data) > 0:
+                    return data[0]
+            except Exception:
+                pass
+        return {}
+    except Exception as e:
+        print(f"Exception occurred fetching airport info: {e}")
+        return {}
