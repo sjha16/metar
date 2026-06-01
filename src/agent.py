@@ -12,6 +12,10 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 from functools import lru_cache
 
+# Import protection layers
+from src.cache_manager import weather_cache
+from src.queue_manager import request_queue
+
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
@@ -710,11 +714,24 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
 # MAIN ORCHESTRATOR
 # ============================================
 
-def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, Any]:
+def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "", use_cache: bool = True) -> Dict[str, Any]:
     """
-    Smart orchestrator - tries providers in order of reliability.
-    DeepSeek is actually great at JSON but needs the right prompt.
+    Smart orchestrator with dual-tier caching and synchronous queue.
+    Same airport + same weather = instant response from cache.
     """
+    # Extract ICAO from METAR
+    icao = raw_metar[:4].strip().upper() if len(raw_metar) >= 4 else "UNKN"
+    
+    # Layer 1: Try cache first
+    if use_cache:
+        cached = weather_cache.get(icao, raw_metar, max_age_seconds=300)
+        if cached:
+            # Create a copy so we don't mutate memory cache
+            response = dict(cached)
+            response['from_cache'] = True
+            response['cache_info'] = "⚡ Instant result from cache (5 min freshness)"
+            return response
+            
     # Validate inputs
     if not raw_metar or len(raw_metar.strip()) < 10:
         return {
@@ -729,7 +746,7 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
     raw_taf = raw_taf.strip().upper() if raw_taf else "NO TAF AVAILABLE"
     combined_content = f"Raw METAR string: {raw_metar}\nRaw TAF block: {raw_taf}"
     
-    print(f"🛫 Analyzing weather data...")
+    print(f"🛫 Analyzing weather data for {icao}...")
     print(f"   METAR: {raw_metar[:80]}...")
     print(f"   TAF: {raw_taf[:80] if raw_taf else 'None'}...")
     
@@ -755,48 +772,65 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
         }
     ]
     
-    # Try each provider
-    for provider in providers:
-        if not provider["key"]:
-            print(f"   {provider['emoji']} {provider['name']}: No API key")
-            continue
-        
-        if not rate_limiter.can_call(provider["name"]):
-            print(f"   {provider['emoji']} {provider['name']}: Rate limited")
-            continue
-        
-        try:
-            print(f"   {provider['emoji']} Trying {provider['name']}...")
-            result = provider["callable"](combined_content)
-            rate_limiter.record_call(provider["name"])
+    # Inner helper to process calls inside the queue
+    def _call_providers():
+        for provider in providers:
+            if not provider["key"]:
+                print(f"   {provider['emoji']} {provider['name']}: No API key")
+                continue
             
-            if result:
-                print(f"   ✅ {provider['name']} success!")
-                response = _validate_and_parse(result, provider["name"])
-                response["rate_limit_stats"] = rate_limiter.get_stats()
+            if not rate_limiter.can_call(provider["name"]):
+                print(f"   {provider['emoji']} {provider['name']}: Rate limited")
+                continue
+            
+            try:
+                print(f"   {provider['emoji']} Trying {provider['name']}...")
+                result = provider["callable"](combined_content)
+                rate_limiter.record_call(provider["name"])
                 
-                # If it's a fallback provider, mark fallback_used
-                if provider["name"] != "gemini":
-                    response["fallback_used"] = True
+                if result:
+                    print(f"   ✅ {provider['name']} success!")
+                    response = _validate_and_parse(result, provider["name"])
+                    response["rate_limit_stats"] = rate_limiter.get_stats()
                     
-                return response
-            else:
-                print(f"   ⚠️ {provider['name']}: No result")
-                
-        except Exception as e:
-            print(f"   ❌ {provider['name']} failed: {str(e)[:80]}")
-            continue
+                    # If it's a fallback provider, mark fallback_used
+                    if provider["name"] != "gemini":
+                        response["fallback_used"] = True
+                        
+                    return response
+                else:
+                    print(f"   ⚠️ {provider['name']}: No result")
+                    
+            except Exception as e:
+                print(f"   ❌ {provider['name']} failed: {str(e)[:80]}")
+                continue
+        return None
+
+    # Layer 3: Synchronous Request Queue
+    response = request_queue.process_request(_call_providers)
     
-    # Ultimate fallback
-    print("   🔧 All AI failed, using basic parser")
+    # If a valid response was returned, cache it and return
+    if response and response.get("status") in ["success", "partial"]:
+        response['from_cache'] = False
+        if use_cache:
+            weather_cache.set(icao, raw_metar, response)
+        return response
+        
+    # Ultimate fallback if queue/AI failed or all providers failed
+    print("   🔧 All AI failed or queue issue, using basic parser")
     response = _basic_metar_parse(raw_metar, raw_taf)
     response["rate_limit_stats"] = rate_limiter.get_stats()
     response["fallback_used"] = True
     response["warning"] = (
-        "⚠️ ALL AI SERVICES CURRENTLY UNAVAILABLE. "
+        "⚠️ ALL AI SERVICES CURRENTLY OVERLOADED. "
         "Showing basic automated analysis. "
         "This is NOT a substitute for official weather briefing."
     )
+    
+    # Cache the fallback result too to prevent queue thrashing
+    if use_cache:
+        weather_cache.set(icao, raw_metar, response)
+        
     return response
 
 
@@ -820,6 +854,9 @@ def cached_analyze_metar(metar: str, taf: str = "") -> str:
 
 def get_ai_status() -> Dict[str, Any]:
     """Get current status of all AI providers"""
+    from src.cache_manager import weather_cache
+    from src.queue_manager import request_queue
+    
     return {
         "deepseek_configured": bool(DEEPSEEK_KEY),
         "gemini_configured": bool(GEMINI_KEY),
@@ -828,7 +865,9 @@ def get_ai_status() -> Dict[str, Any]:
         "gemini_available": bool(GEMINI_KEY and rate_limiter.can_call("gemini")),
         "groq_available": bool(GROQ_KEY and rate_limiter.can_call("groq")),
         "rate_limits": rate_limiter.get_stats(),
-        "environment_valid": ENV_OK
+        "environment_valid": ENV_OK,
+        "cache_stats": weather_cache.get_stats(),
+        "queue_stats": request_queue.get_stats()
     }
 
 
