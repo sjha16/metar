@@ -198,112 +198,67 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
 # ============================================
 
 class RateLimiter:
-    """Persistent, cross-process sliding-window rate limiter using a local JSON file"""
+    """Improved rate limiter to prevent hitting API limits"""
     
-    def __init__(self, cache_file: Optional[Path] = None):
-        if cache_file is None:
-            self.cache_file = Path(__file__).resolve().parent / "rate_limit_state.json"
-        else:
-            self.cache_file = cache_file
-            
-        self.limits = {
-            "deepseek": {"max_rpm": 50, "min_spacing": 0.5},
-            "gemini": {"max_rpm": 14, "min_spacing": 4.0}, # 4.0s spacing ensures max 15 RPM globally
-            "groq": {"max_rpm": 28, "min_spacing": 2.0}    # 2.0s spacing ensures max 30 RPM globally
+    def __init__(self):
+        self.last_call_time: Dict[str, float] = {}
+        self.call_counts: Dict[str, int] = {"gemini": 0, "groq": 0, "deepseek": 0}
+        self.window_start = time.time()
+        self.window_duration = 60  # 1 minute window
+        
+        # Stricter limits to stay under free tier caps
+        self.max_per_minute = {
+            "gemini": 10,     # Free: 15/min, stay under
+            "groq": 25,       # Free: 30/min, stay under
+            "deepseek": 50    # Paid: generous
         }
-        self._init_cache()
-
-    def _init_cache(self):
-        """Ensure the rate limit cache file exists and is valid"""
-        if not self.cache_file.exists():
-            self._write_state({"deepseek": [], "gemini": [], "groq": []})
-
-    def _read_state(self) -> Dict[str, list]:
-        try:
-            if self.cache_file.exists():
-                return json.loads(self.cache_file.read_text(encoding='utf-8'))
-        except Exception:
-            pass
-        return {"deepseek": [], "gemini": [], "groq": []}
-
-    def _write_state(self, state: Dict[str, list]):
-        try:
-            self.cache_file.write_text(json.dumps(state), encoding='utf-8')
-        except Exception as e:
-            # Silently fallback if disk writes are temporarily locked
-            pass
-
+        
+        # Minimum time between calls (seconds)
+        self.min_interval = {
+            "gemini": 2.0,    # Wait 2s between Gemini calls
+            "groq": 0.5,      # Groq is fast
+            "deepseek": 1.0   # DeepSeek moderate
+        }
+    
     def can_call(self, provider: str) -> bool:
-        """Check if provider can be called based on shared cross-process limits"""
-        if provider not in self.limits:
-            return True
-            
+        """Check if we can call this provider"""
         now = time.time()
-        state = self._read_state()
-        timestamps = state.get(provider, [])
         
-        # Clean up timestamps older than 60 seconds (sliding window)
-        timestamps = [t for t in timestamps if now - t < 60]
+        # Reset window if needed
+        if now - self.window_start > self.window_duration:
+            self.call_counts = {"gemini": 0, "groq": 0, "deepseek": 0}
+            self.window_start = now
         
-        # Check RPM limit
-        if len(timestamps) >= self.limits[provider]["max_rpm"]:
+        # Check minute limit
+        if self.call_counts.get(provider, 0) >= self.max_per_minute.get(provider, 10):
             return False
-            
-        # Check minimum spacing between calls
-        if timestamps:
-            last_call = timestamps[-1]
-            if now - last_call < self.limits[provider]["min_spacing"]:
+        
+        # Check cooldown
+        if provider in self.last_call_time:
+            elapsed = now - self.last_call_time[provider]
+            if elapsed < self.min_interval.get(provider, 1.0):
                 return False
-                
+        
         return True
-
+    
     def record_call(self, provider: str):
-        """Record that a call was made across all processes"""
-        if provider not in self.limits:
-            return
-            
-        now = time.time()
-        state = self._read_state()
-        timestamps = state.get(provider, [])
-        
-        # Clean up old timestamps and append new call
-        timestamps = [t for t in timestamps if now - t < 60]
-        timestamps.append(now)
-        state[provider] = timestamps
-        
-        self._write_state(state)
-
+        """Record a successful API call"""
+        self.last_call_time[provider] = time.time()
+        self.call_counts[provider] = self.call_counts.get(provider, 0) + 1
+    
     def get_stats(self) -> Dict[str, Any]:
-        """Get current rate limit statistics"""
+        """Get current rate limit stats"""
         now = time.time()
-        state = self._read_state()
-        stats = {}
-        providers_avail = {}
+        remaining_seconds = max(0, self.window_duration - (now - self.window_start))
         
-        for provider in ["deepseek", "gemini", "groq"]:
-            timestamps = state.get(provider, [])
-            timestamps = [t for t in timestamps if now - t < 60]
-            stats[provider] = len(timestamps)
-            
-            # Check availability
-            avail = True
-            if len(timestamps) >= self.limits[provider]["max_rpm"]:
-                avail = False
-            elif timestamps and now - timestamps[-1] < self.limits[provider]["min_spacing"]:
-                avail = False
-            providers_avail[provider] = avail
-            
-        # Determine reset based on oldest timestamp across active providers
-        oldest_ts = now
-        for provider in ["deepseek", "gemini", "groq"]:
-            ts_list = state.get(provider, [])
-            if ts_list:
-                oldest_ts = min(oldest_ts, ts_list[0])
-            
         return {
-            "calls_this_minute": stats,
-            "seconds_until_reset": max(0, int(60 - (now - oldest_ts))),
-            "providers_available": providers_avail
+            "calls_this_minute": dict(self.call_counts),
+            "seconds_until_reset": int(remaining_seconds),
+            "providers_available": {
+                "gemini": self.can_call("gemini"),
+                "groq": self.can_call("groq"),
+                "deepseek": self.can_call("deepseek")
+            }
         }
 
 
@@ -317,61 +272,63 @@ rate_limiter = RateLimiter()
 
 def _call_gemini(combined_content: str) -> Optional[str]:
     """
-    Call Gemini API for METAR analysis.
-    Returns JSON string on success, None on failure.
+    Call Gemini API with rate limit handling and retry logic.
     """
-    try:
-        client = genai.Client(api_key=GEMINI_KEY)
-        
-        response = client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=(
-                f"Analyze this raw airport weather data and populate the comprehensive "
-                f"aviation assistant format. Provide thorough, accurate analysis for every field.\n\n"
-                f"WEATHER DATA:\n{combined_content}"
-            ),
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                response_mime_type="application/json",
-                response_schema=METARAnalysis,
-                temperature=0.0,
-                max_output_tokens=8192,
-                top_p=0.95
-            ),
-        )
-        
-        # Check for valid response
-        if response and response.text:
-            # Check if content was blocked
-            if response.prompt_feedback and response.prompt_feedback.block_reason:
-                print(f"⚠️ Gemini content blocked: {response.prompt_feedback.block_reason}")
-                return None
+    max_retries = 2
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries + 1):
+        try:
+            if attempt > 0:
+                print(f"   Gemini retry {attempt}/{max_retries}...")
+                time.sleep(retry_delay * attempt)
             
-            return response.text
-        
-        # Handle safety filters
-        if response and hasattr(response, 'candidates') and not response.candidates:
-            print("⚠️ Gemini returned no candidates (possible safety filter)")
+            client = genai.Client(api_key=GEMINI_KEY)
+            
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',  # Fastest model
+                contents=(
+                    f"Analyze this raw airport weather data and populate the comprehensive "
+                    f"aviation assistant format. Provide thorough, accurate analysis for every field.\n\n"
+                    f"WEATHER DATA:\n{combined_content}"
+                ),
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,  # Keep full system instructions for 100% accurate pilot safety checks!
+                    response_mime_type="application/json",
+                    response_schema=METARAnalysis,
+                    temperature=0.0,
+                    max_output_tokens=800,  # Limit output size for speed
+                ),
+            )
+            
+            if response and response.text:
+                return response.text
+            
+            # Check if blocked
+            if response and response.prompt_feedback and response.prompt_feedback.block_reason:
+                print(f"⚠️ Gemini blocked: {response.prompt_feedback.block_reason}")
+                return None
+                
             return None
-        
-        print("⚠️ Gemini returned empty response")
-        return None
-        
-    except APIError as e:
-        error_messages = {
-            400: "Bad request - check METAR format",
-            401: "Invalid API key",
-            429: "Rate limit exceeded",
-            500: "Gemini server error",
-            503: "Gemini service unavailable"
-        }
-        msg = error_messages.get(e.code, f"Unknown error")
-        print(f"⚠️ Gemini API Error {e.code}: {msg}")
-        raise Exception(f"GEMINI_ERROR_{e.code}")
-        
-    except Exception as e:
-        print(f"⚠️ Gemini unexpected error: {str(e)[:150]}")
-        raise
+            
+        except APIError as e:
+            if e.code == 429:  # Rate limit
+                if attempt < max_retries:
+                    wait_time = retry_delay * (attempt + 1)
+                    print(f"⚠️ Gemini rate limited. Waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    print("❌ Gemini rate limit persists after retries")
+                    raise Exception("GEMINI_ERROR_429")
+            else:
+                print(f"⚠️ Gemini API Error {e.code}")
+                raise Exception(f"GEMINI_ERROR_{e.code}")
+        except Exception as e:
+            print(f"⚠️ Gemini error: {str(e)[:100]}")
+            raise
+    
+    return None
 
 
 def _call_groq(combined_content: str) -> Optional[str]:
@@ -442,10 +399,29 @@ def _call_groq(combined_content: str) -> Optional[str]:
         raise
 
 
+def _extract_json_bruteforce(content: str) -> Optional[str]:
+    """
+    Extracts JSON from a string by finding the first '{' and last '}'.
+    Very robust against markdown wrapping or conversational prefixes/suffixes.
+    """
+    if not content:
+        return None
+    try:
+        start = content.find('{')
+        end = content.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            candidate = content[start:end+1]
+            # Validate it's actual JSON
+            json.loads(candidate)
+            return candidate
+    except Exception:
+        pass
+    return None
+
+
 def _call_deepseek(combined_content: str) -> Optional[str]:
     """
-    Call DeepSeek API for METAR analysis.
-    DeepSeek is OpenAI-compatible!
+    Call DeepSeek V3 with JSON-focused prompt and robust JSON fallback handling.
     """
     try:
         from openai import OpenAI
@@ -455,65 +431,70 @@ def _call_deepseek(combined_content: str) -> Optional[str]:
             base_url="https://api.deepseek.com"
         )
         
-        prompt = f"""You are an aviation weather analyst. Analyze this data and return ONLY a valid JSON object.
+        # Much simpler, more direct prompt
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a JSON weather API. Your ONLY job is to output valid JSON. "
+                        "Never include markdown formatting, code blocks, or any text outside the JSON object. "
+                        "Start your response with { and end with }."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": f"""Analyze this aviation weather data and output a JSON object with these EXACT 12 fields:
 
-WEATHER DATA:
 {combined_content}
 
-REQUIRED JSON FIELDS (return all of them):
+Output this JSON structure (replace values with your analysis):
 {{
-    "station": "4-letter ICAO code",
-    "time_of_observation": "observation time in plain English",
-    "surface_wind": "wind description in plain English",
-    "visibility": "visibility in plain English",
-    "clouds": "cloud conditions in plain English",
-    "temperature_dew_point": "temperature and dew point in plain English",
-    "qnh": "altimeter setting in plain English",
-    "flight_category": "VFR, MVFR, IFR, or LIFR",
-    "forecast_trend": "TAF summary or 'No TAF available'",
-    "flight_recommendation": "Go/No-Go for student pilot with reasoning",
-    "educational_insights": "teaching points from this weather",
-    "pertinent_information": "critical ATC notes"
+  "station": "4-letter ICAO",
+  "time_of_observation": "time in plain English",
+  "surface_wind": "wind direction and speed in words",
+  "visibility": "visibility in plain English",
+  "clouds": "cloud layers in plain English",
+  "temperature_dew_point": "temperature and dew point in words",
+  "qnh": "altimeter setting in plain English",
+  "flight_category": "VFR or MVFR or IFR or LIFR",
+  "forecast_trend": "TAF summary or No TAF available",
+  "flight_recommendation": "Go or No-Go for student pilot with brief reason",
+  "educational_insights": "one teaching point from this weather",
+  "pertinent_information": "important ATC operational notes"
 }}
 
-CRITICAL RULES:
-{SYSTEM_INSTRUCTION}
-
-Return ONLY the JSON object, no other text."""
-        
-        response = client.chat.completions.create(
-            model="deepseek-chat",  # DeepSeek-V3
-            messages=[
-                {"role": "system", "content": "You are a JSON-only API. Return only valid JSON."},
-                {"role": "user", "content": prompt}
+CRITICAL: Output ONLY the JSON object. No other text."""
+                }
             ],
             temperature=0.0,
-            max_tokens=4000,
-            response_format={"type": "json_object"}  # DeepSeek supports this!
+            max_tokens=800,
+            response_format={"type": "json_object"}  # Native JSON mode
         )
         
         content = response.choices[0].message.content
         
-        # Validate it's actual JSON
-        if content:
-            try:
-                json.loads(content)
-                return content
-            except json.JSONDecodeError:
-                # Try to extract JSON if DeepSeek added extra text
-                json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                if json_match:
-                    extracted = json_match.group()
-                    try:
-                        json.loads(extracted)
-                        print("⚠️ Extracted JSON from DeepSeek response (had extra text)")
-                        return extracted
-                    except:
-                        pass
-                print("⚠️ DeepSeek returned invalid JSON")
-                return None
+        if not content:
+            print("⚠️ DeepSeek returned empty response")
+            return None
         
-        return None
+        # Validate it's proper JSON
+        try:
+            # Try parsing directly
+            parsed = json.loads(content)
+            print(f"✅ DeepSeek JSON valid: {len(content)} chars")
+            return json.dumps(parsed)
+        except json.JSONDecodeError:
+            # Try cleaning with the bruteforce extractor
+            print("⚠️ DeepSeek JSON needs cleaning...")
+            cleaned = _extract_json_bruteforce(content)
+            if cleaned:
+                print("✅ DeepSeek JSON cleaned successfully")
+                return cleaned
+            else:
+                print(f"❌ DeepSeek JSON unparseable: {content[:200]}...")
+                return None
         
     except Exception as e:
         print(f"⚠️ DeepSeek error: {str(e)[:150]}")
@@ -731,17 +712,8 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
 
 def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, Any]:
     """
-    Main orchestrator for METAR/TAF analysis.
-    
-    Attempts Gemini first, falls back to Groq, then basic parsing.
-    Returns structured dict with analysis and metadata.
-    
-    Args:
-        raw_metar: Raw METAR string
-        raw_taf: Raw TAF string (optional)
-    
-    Returns:
-        Dict with keys: status, provider, analysis, timestamp, ai_available
+    Smart orchestrator - tries providers in order of reliability.
+    DeepSeek is actually great at JSON but needs the right prompt.
     """
     # Validate inputs
     if not raw_metar or len(raw_metar.strip()) < 10:
@@ -753,93 +725,70 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
             "ai_available": False
         }
     
-    # Clean inputs
     raw_metar = raw_metar.strip().upper()
     raw_taf = raw_taf.strip().upper() if raw_taf else "NO TAF AVAILABLE"
-    
-    # Prepare combined content
     combined_content = f"Raw METAR string: {raw_metar}\nRaw TAF block: {raw_taf}"
     
     print(f"🛫 Analyzing weather data...")
     print(f"   METAR: {raw_metar[:80]}...")
     print(f"   TAF: {raw_taf[:80] if raw_taf else 'None'}...")
     
-    # === ATTEMPT 1: DeepSeek ===
-    if DEEPSEEK_KEY and rate_limiter.can_call("deepseek"):
-        try:
-            print("🚀 Attempting analysis with DeepSeek...")
-            result = _call_deepseek(combined_content)
-            rate_limiter.record_call("deepseek")
-            
-            if result:
-                print("✅ DeepSeek analysis successful")
-                response = _validate_and_parse(result, "deepseek")
-                response["rate_limit_stats"] = rate_limiter.get_stats()
-                return response
-            else:
-                print("⚠️ DeepSeek returned no usable result")
-                
-        except Exception as e:
-            error_msg = str(e)[:100]
-            print(f"⚠️ DeepSeek failed: {error_msg}")
-    else:
-        if not DEEPSEEK_KEY:
-            print("⚠️ DeepSeek API key not configured")
-        elif not rate_limiter.can_call("deepseek"):
-            print("⚠️ DeepSeek rate limit reached, skipping to fallback")
-
-    # === ATTEMPT 2: Gemini ===
-    if GEMINI_KEY and rate_limiter.can_call("gemini"):
-        try:
-            print("🤖 Attempting analysis with Gemini 2.5 Flash...")
-            result = _call_gemini(combined_content)
-            rate_limiter.record_call("gemini")
-            
-            if result:
-                print("✅ Gemini analysis successful")
-                response = _validate_and_parse(result, "gemini")
-                response["rate_limit_stats"] = rate_limiter.get_stats()
-                response["fallback_used"] = True
-                return response
-            else:
-                print("⚠️ Gemini returned no usable result")
-                
-        except Exception as e:
-            error_msg = str(e)[:100]
-            print(f"⚠️ Gemini failed: {error_msg}")
-    else:
-        if not GEMINI_KEY:
-            print("⚠️ Gemini API key not configured")
-        elif not rate_limiter.can_call("gemini"):
-            print("⚠️ Gemini rate limit reached, skipping to fallback")
+    # Define providers in order of preference
+    providers = [
+        {
+            "name": "deepseek",
+            "key": DEEPSEEK_KEY,
+            "callable": _call_deepseek,
+            "emoji": "🌐"
+        },
+        {
+            "name": "gemini", 
+            "key": GEMINI_KEY,
+            "callable": _call_gemini,
+            "emoji": "🤖"
+        },
+        {
+            "name": "groq",
+            "key": GROQ_KEY,
+            "callable": _call_groq,
+            "emoji": "⚡"
+        }
+    ]
     
-    # === ATTEMPT 3: Groq ===
-    if GROQ_KEY and rate_limiter.can_call("groq"):
+    # Try each provider
+    for provider in providers:
+        if not provider["key"]:
+            print(f"   {provider['emoji']} {provider['name']}: No API key")
+            continue
+        
+        if not rate_limiter.can_call(provider["name"]):
+            print(f"   {provider['emoji']} {provider['name']}: Rate limited")
+            continue
+        
         try:
-            print("🔄 Attempting analysis with Groq (Llama 3.3)...")
-            result = _call_groq(combined_content)
-            rate_limiter.record_call("groq")
+            print(f"   {provider['emoji']} Trying {provider['name']}...")
+            result = provider["callable"](combined_content)
+            rate_limiter.record_call(provider["name"])
             
             if result:
-                print("✅ Groq analysis successful")
-                response = _validate_and_parse(result, "groq")
+                print(f"   ✅ {provider['name']} success!")
+                response = _validate_and_parse(result, provider["name"])
                 response["rate_limit_stats"] = rate_limiter.get_stats()
-                response["fallback_used"] = True
+                
+                # If it's a fallback provider, mark fallback_used
+                if provider["name"] != "deepseek":
+                    response["fallback_used"] = True
+                    
                 return response
             else:
-                print("⚠️ Groq returned no usable result")
+                print(f"   ⚠️ {provider['name']}: No result")
                 
         except Exception as e:
-            error_msg = str(e)[:100]
-            print(f"⚠️ Groq failed: {error_msg}")
-    else:
-        if not GROQ_KEY:
-            print("⚠️ Groq API key not configured")
-        elif not rate_limiter.can_call("groq"):
-            print("⚠️ Groq rate limit reached")
+            print(f"   ❌ {provider['name']} failed: {str(e)[:80]}")
+            continue
     
-    # === ATTEMPT 4: Ultimate Fallback ===
-    print("⚠️ All AI providers unavailable. Using basic regex parser...")
+    # Ultimate fallback
+    print("   🔧 All AI failed, using basic parser")
     response = _basic_metar_parse(raw_metar, raw_taf)
     response["rate_limit_stats"] = rate_limiter.get_stats()
     response["fallback_used"] = True
@@ -989,8 +938,62 @@ def run_tests():
 
 
 # ============================================
+# TEMPORARY DEBUG FUNCTION
+# ============================================
+
+def debug_deepseek_response():
+    """Test what DeepSeek actually returns"""
+    from openai import OpenAI
+    
+    client = OpenAI(
+        api_key=DEEPSEEK_KEY,
+        base_url="https://api.deepseek.com"
+    )
+    
+    test_metar = "KJFK 151251Z 18010KT 10SM FEW025 22/15 A3002"
+    
+    print("\n🔍 TESTING DEEPSEEK RESPONSE FORMAT...")
+    
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a JSON API. Output ONLY valid JSON. No markdown, no extra text."
+                },
+                {
+                    "role": "user",
+                    "content": f"Return JSON analysis for: {test_metar}"
+                }
+            ],
+            response_format={"type": "json_object"}
+        )
+        
+        content = response.choices[0].message.content
+        print(f"Raw response type: {type(content)}")
+        print(f"Response starts with: {repr(content[:50])}...")
+        print(f"Response ends with: ...{repr(content[-50:])}")
+        print(f"Contains backticks: {'```' in content}")
+        print(f"Contains 'json': {'json' in content[:20].lower()}")
+        
+        try:
+            json.loads(content)
+            print("✅ Valid JSON!")
+        except Exception as e:
+            print(f"❌ Invalid JSON - needs cleaning: {e}")
+            print(f"Full response:\n{content}")
+            
+    except Exception as e:
+        print(f"❌ DeepSeek Debug Error: {e}")
+
+
+# ============================================
 # MAIN EXECUTION
 # ============================================
 
 if __name__ == "__main__":
+    # Run a quick DeepSeek format check first
+    if DEEPSEEK_KEY:
+        debug_deepseek_response()
     run_tests()
