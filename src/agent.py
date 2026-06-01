@@ -173,12 +173,12 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
    - Identify any NOTAM-worthy conditions
 
 5. TEXT FORMATTING STANDARDS:
-   - Use conversational, professional aviation language
-   - Write out all units: "knots" NOT "KT", "miles" NOT "SM", "feet" NOT "FT"
-   - Write temperatures as "25 degrees Celsius" NOT "25°C"
-   - Write altimeter as "30.02 inches of mercury" NOT "A3002"
-   - Never use raw METAR codes in output (except in educational section where explaining them)
-   - Be concise but thorough - aim for 3-5 sentences per field
+    - Use conversational, professional aviation language
+    - Write out all units: "knots" NOT "KT", "miles" NOT "SM", "feet" NOT "FT"
+    - Write temperatures as "25 degrees Celsius" NOT "25°C"
+    - Write altimeter/QNH settings exactly in their reported units: use "Altimeter 30.02 inches of mercury" for North American 'A' settings, and "QNH 1013 hectopascals" for international 'Q' settings (do NOT convert between units or map hectopascals into inches of mercury).
+    - Never use raw METAR codes in output (except in educational section where explaining them)
+    - Be concise but thorough - aim for 3-5 sentences per field
 
 6. MISSING DATA HANDLING:
    - If TAF is not available or incomplete, state "TAF data unavailable for this station" in forecast_trend
