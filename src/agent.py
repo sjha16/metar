@@ -411,7 +411,7 @@ def _call_groq(combined_content: str) -> Optional[str]:
             ],
             response_format={"type": "json_object"},
             temperature=0.0,
-            max_tokens=1500
+            max_tokens=3000
         )
         
         content = response.choices[0].message.content
@@ -488,7 +488,7 @@ Return ONLY the JSON object, no other text."""
                 {"role": "user", "content": prompt}
             ],
             temperature=0.0,
-            max_tokens=1500,
+            max_tokens=4000,
             response_format={"type": "json_object"}  # DeepSeek supports this!
         )
         
