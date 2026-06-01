@@ -736,12 +736,6 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
     # Define providers in order of preference
     providers = [
         {
-            "name": "deepseek",
-            "key": DEEPSEEK_KEY,
-            "callable": _call_deepseek,
-            "emoji": "🌐"
-        },
-        {
             "name": "gemini", 
             "key": GEMINI_KEY,
             "callable": _call_gemini,
@@ -752,6 +746,12 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
             "key": GROQ_KEY,
             "callable": _call_groq,
             "emoji": "⚡"
+        },
+        {
+            "name": "deepseek",
+            "key": DEEPSEEK_KEY,
+            "callable": _call_deepseek,
+            "emoji": "🌐"
         }
     ]
     
@@ -776,7 +776,7 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "") -> Dict[str, A
                 response["rate_limit_stats"] = rate_limiter.get_stats()
                 
                 # If it's a fallback provider, mark fallback_used
-                if provider["name"] != "deepseek":
+                if provider["name"] != "gemini":
                     response["fallback_used"] = True
                     
                 return response
