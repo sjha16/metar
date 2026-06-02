@@ -43,9 +43,13 @@ def check_environment():
 # Get free keys from:
 # Gemini: https://makersuite.google.com/app/apikey
 # Groq: https://console.groq.com
+# OpenAI: https://platform.openai.com
+# DeepSeek: https://platform.deepseek.com
 
 GEMINI_API_KEY=your_gemini_key_here
 GROQ_API_KEY=your_groq_key_here
+OPENAI_API_KEY=your_openai_key_here
+DEEPSEEK_API_KEY=your_deepseek_key_here
 """
         env_path.write_text(template)
         print(f"✅ Created .env template at: {env_path}")
@@ -56,6 +60,8 @@ GROQ_API_KEY=your_groq_key_here
     
     gemini_key = os.getenv("GEMINI_API_KEY")
     groq_key = os.getenv("GROQ_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
     
     warnings = []
     
@@ -64,6 +70,12 @@ GROQ_API_KEY=your_groq_key_here
     
     if not groq_key or "your_groq_key" in groq_key:
         warnings.append("GROQ_API_KEY not configured")
+        
+    if not openai_key or "your_openai_key" in openai_key:
+        warnings.append("OPENAI_API_KEY not configured")
+        
+    if not deepseek_key or "your_deepseek_key" in deepseek_key:
+        warnings.append("DEEPSEEK_API_KEY not configured")
     
     if warnings:
         print("\n⚠️  API Key Warnings:")

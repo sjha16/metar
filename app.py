@@ -117,24 +117,30 @@ def render_sidebar():
         st.markdown("#### 🤖 AI Engine Status")
         ai_status = get_ai_status()
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            if ai_status.get("deepseek_available"):
-                st.success("DSeek ✅")
+            if ai_status.get("gemini_available"):
+                st.success("Gmni ✅")
             else:
-                st.error("DSeek ❌")
+                st.error("Gmni ❌")
         
         with col2:
-            if ai_status.get("gemini_available"):
-                st.success("Gemini ✅")
+            if ai_status.get("openai_available"):
+                st.success("OAI ✅")
             else:
-                st.error("Gemini ❌")
+                st.error("OAI ❌")
         
         with col3:
             if ai_status.get("groq_available"):
                 st.success("Groq ✅")
             else:
                 st.error("Groq ❌")
+                
+        with col4:
+            if ai_status.get("deepseek_available"):
+                st.success("Dsk ✅")
+            else:
+                st.error("Dsk ❌")
         
         # Rate limit info
         if ai_status.get("rate_limits"):
@@ -678,7 +684,7 @@ def main():
         
         # Check AI availability before analysis
         ai_status = get_ai_status()
-        is_overloaded = not ai_status.get('gemini_available') and not ai_status.get('groq_available') and not ai_status.get('deepseek_available')
+        is_overloaded = not ai_status.get('gemini_available') and not ai_status.get('openai_available') and not ai_status.get('groq_available') and not ai_status.get('deepseek_available')
         if is_overloaded:
             show_high_traffic_mode()
         

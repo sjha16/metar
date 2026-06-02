@@ -37,6 +37,7 @@ load_dotenv(dotenv_path=env_path)
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_KEY = os.getenv("GROQ_API_KEY")
 DEEPSEEK_KEY = os.getenv("DEEPSEEK_API_KEY")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
 
 def validate_environment() -> bool:
@@ -49,6 +50,8 @@ def validate_environment() -> bool:
         missing.append("GROQ_API_KEY")
     if not DEEPSEEK_KEY:
         missing.append("DEEPSEEK_API_KEY")
+    if not OPENAI_KEY:
+        missing.append("OPENAI_API_KEY")
     
     if missing:
         print(f"⚠️ Missing API keys: {', '.join(missing)}")
@@ -64,6 +67,9 @@ def validate_environment() -> bool:
         
     if DEEPSEEK_KEY and not DEEPSEEK_KEY.startswith("sk-"):
         print("⚠️ DeepSeek API key format looks unusual (expected starting with 'sk-')")
+        
+    if OPENAI_KEY and not OPENAI_KEY.startswith("sk-"):
+        print("⚠️ OpenAI API key format looks unusual (expected starting with 'sk-')")
     
     return True
 
@@ -207,7 +213,7 @@ class RateLimiter:
     
     def __init__(self):
         self.last_call_time: Dict[str, float] = {}
-        self.call_counts: Dict[str, int] = {"gemini": 0, "groq": 0, "deepseek": 0}
+        self.call_counts: Dict[str, int] = {"gemini": 0, "groq": 0, "deepseek": 0, "openai": 0}
         self.window_start = time.time()
         self.window_duration = 60  # 1 minute window
         
@@ -215,14 +221,16 @@ class RateLimiter:
         self.max_per_minute = {
             "gemini": 10,     # Free: 15/min, stay under
             "groq": 25,       # Free: 30/min, stay under
-            "deepseek": 50    # Paid: generous
+            "deepseek": 50,   # Paid: generous
+            "openai": 30      # Paid/Tier: generous
         }
         
         # Minimum time between calls (seconds)
         self.min_interval = {
             "gemini": 2.0,    # Wait 2s between Gemini calls
             "groq": 0.5,      # Groq is fast
-            "deepseek": 1.0   # DeepSeek moderate
+            "deepseek": 1.0,  # DeepSeek moderate
+            "openai": 0.5     # OpenAI is fast
         }
     
     def can_call(self, provider: str) -> bool:
@@ -231,7 +239,7 @@ class RateLimiter:
         
         # Reset window if needed
         if now - self.window_start > self.window_duration:
-            self.call_counts = {"gemini": 0, "groq": 0, "deepseek": 0}
+            self.call_counts = {"gemini": 0, "groq": 0, "deepseek": 0, "openai": 0}
             self.window_start = now
         
         # Check minute limit
@@ -262,7 +270,8 @@ class RateLimiter:
             "providers_available": {
                 "gemini": self.can_call("gemini"),
                 "groq": self.can_call("groq"),
-                "deepseek": self.can_call("deepseek")
+                "deepseek": self.can_call("deepseek"),
+                "openai": self.can_call("openai")
             }
         }
 
@@ -401,6 +410,75 @@ def _call_groq(combined_content: str) -> Optional[str]:
         
     except Exception as e:
         print(f"⚠️ Groq error: {str(e)[:150]}")
+        raise
+
+
+def _call_openai(combined_content: str) -> Optional[str]:
+    """
+    Call OpenAI API for METAR analysis (fallback).
+    Returns JSON string on success, None on failure.
+    """
+    try:
+        from openai import OpenAI
+        
+        client = OpenAI(api_key=OPENAI_KEY)
+        
+        # Convert Pydantic schema to detailed JSON instructions
+        schema_fields = list(METARAnalysis.model_fields.keys())
+        schema_description = {}
+        for field in schema_fields:
+            schema_description[field] = METARAnalysis.model_fields[field].description
+        
+        prompt_with_schema = (
+            f"You are an expert aviation weather analyst.\n\n"
+            f"Analyze this weather data thoroughly:\n{combined_content}\n\n"
+            f"You MUST return a valid JSON object with EXACTLY these fields:\n"
+            f"{json.dumps(schema_description, indent=2)}\n\n"
+            f"CRITICAL SYSTEM RULES:\n{SYSTEM_INSTRUCTION}\n\n"
+            f"Remember: Return ONLY the JSON object, no additional text."
+        )
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a JSON-only aviation weather analyst. Always return complete, valid JSON with all required fields. Never include text outside the JSON object."
+                },
+                {
+                    "role": "user",
+                    "content": prompt_with_schema
+                }
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            max_tokens=2000
+        )
+        
+        content = response.choices[0].message.content
+        
+        if content:
+            try:
+                json.loads(content)
+                return content
+            except json.JSONDecodeError:
+                # Try to extract JSON if OpenAI added extra text
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    extracted = json_match.group()
+                    try:
+                        json.loads(extracted)
+                        print("⚠️ Extracted JSON from OpenAI response (had extra text)")
+                        return extracted
+                    except:
+                        pass
+                print("⚠️ OpenAI returned invalid JSON")
+                return None
+        
+        return None
+        
+    except Exception as e:
+        print(f"⚠️ OpenAI error: {str(e)[:150]}")
         raise
 
 
@@ -809,6 +887,12 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "", use_cache: boo
             "emoji": "🤖"
         },
         {
+            "name": "openai",
+            "key": OPENAI_KEY,
+            "callable": _call_openai,
+            "emoji": "🧠"
+        },
+        {
             "name": "groq",
             "key": GROQ_KEY,
             "callable": _call_groq,
@@ -915,9 +999,11 @@ def get_ai_status() -> Dict[str, Any]:
         "deepseek_configured": bool(DEEPSEEK_KEY),
         "gemini_configured": bool(GEMINI_KEY),
         "groq_configured": bool(GROQ_KEY),
+        "openai_configured": bool(OPENAI_KEY),
         "deepseek_available": bool(DEEPSEEK_KEY and rate_limiter.can_call("deepseek")),
         "gemini_available": bool(GEMINI_KEY and rate_limiter.can_call("gemini")),
         "groq_available": bool(GROQ_KEY and rate_limiter.can_call("groq")),
+        "openai_available": bool(OPENAI_KEY and rate_limiter.can_call("openai")),
         "rate_limits": rate_limiter.get_stats(),
         "environment_valid": ENV_OK,
         "cache_stats": weather_cache.get_stats(),
