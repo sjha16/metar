@@ -286,71 +286,100 @@ rate_limiter = RateLimiter()
 
 def _call_gemini(combined_content: str) -> Optional[str]:
     """
-    Call Gemini API with rate limit handling and retry logic.
+    Call Gemini API via direct REST request to avoid Windows SDK socket timeouts.
     """
+    import requests
+    
     max_retries = 2
     retry_delay = 2  # seconds
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+    
+    headers = {
+        "Content-Type": "application/json"
+    }
+    
+    # Convert Pydantic schema to detailed JSON instructions for unconstrained JSON mode
+    schema_fields = list(METARAnalysis.model_fields.keys())
+    schema_description = {}
+    for field in schema_fields:
+        schema_description[field] = METARAnalysis.model_fields[field].description
+    
+    prompt_with_schema = (
+        f"Analyze this aviation weather data and output a JSON object with these EXACT 12 fields:\n\n"
+        f"{combined_content}\n\n"
+        f"Output this JSON structure (replace values with your analysis):\n"
+        f"{json.dumps(schema_description, indent=2)}\n\n"
+        f"Remember: Output ONLY the JSON object. Do NOT use markdown code blocks or any other wrapping. Start your response with {{ and end with }}."
+    )
+    
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {
+                        "text": prompt_with_schema
+                    }
+                ]
+            }
+        ],
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": SYSTEM_INSTRUCTION
+                }
+            ]
+        },
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.0,
+            "maxOutputTokens": 2000
+        }
+    }
     
     for attempt in range(max_retries + 1):
         try:
             if attempt > 0:
                 print(f"   Gemini retry {attempt}/{max_retries}...")
                 time.sleep(retry_delay * attempt)
-            
-            client = genai.Client(api_key=GEMINI_KEY)
-            
-            # Convert Pydantic schema to detailed JSON instructions for unconstrained JSON mode
-            schema_fields = list(METARAnalysis.model_fields.keys())
-            schema_description = {}
-            for field in schema_fields:
-                schema_description[field] = METARAnalysis.model_fields[field].description
-            
-            prompt_with_schema = (
-                f"Analyze this aviation weather data and output a JSON object with these EXACT 12 fields:\n\n"
-                f"{combined_content}\n\n"
-                f"Output this JSON structure (replace values with your analysis):\n"
-                f"{json.dumps(schema_description, indent=2)}\n\n"
-                f"Remember: Output ONLY the JSON object. Do NOT use markdown code blocks or any other wrapping. Start your response with {{ and end with }}."
-            )
-            
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',  # Fastest model
-                contents=prompt_with_schema,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,  # Keep full system instructions for 100% accurate pilot safety checks!
-                    response_mime_type="application/json",
-                    temperature=0.0,
-                    max_output_tokens=2000,  # Limit output size for speed
-                ),
-            )
-            
-            if response and response.text:
-                return response.text
-            
-            # Check if blocked
-            if response and response.prompt_feedback and response.prompt_feedback.block_reason:
-                print(f"⚠️ Gemini blocked: {response.prompt_feedback.block_reason}")
-                return None
                 
-            return None
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
             
-        except APIError as e:
-            if e.code == 429:  # Rate limit
+            if response.status_code == 200:
+                data = response.json()
+                # Check for prompt block
+                if "candidates" not in data or not data["candidates"]:
+                    print(f"⚠️ Gemini REST returned no candidates: {data}")
+                    return None
+                    
+                candidate = data["candidates"][0]
+                if "content" not in candidate or "parts" not in candidate["content"]:
+                    # Check if blocked
+                    if "finishReason" in candidate and candidate["finishReason"] == "SAFETY":
+                        print(f"⚠️ Gemini blocked: {candidate.get('finishReason')}")
+                    return None
+                    
+                text = candidate["content"]["parts"][0]["text"]
+                return text
+                
+            elif response.status_code == 429:
+                print("⚠️ Gemini rate limited (HTTP 429)")
                 if attempt < max_retries:
                     wait_time = retry_delay * (attempt + 1)
-                    print(f"⚠️ Gemini rate limited. Waiting {wait_time}s...")
                     time.sleep(wait_time)
                     continue
                 else:
-                    print("❌ Gemini rate limit persists after retries")
                     raise Exception("GEMINI_ERROR_429")
             else:
-                print(f"⚠️ Gemini API Error {e.code}")
-                raise Exception(f"GEMINI_ERROR_{e.code}")
+                print(f"⚠️ Gemini API returned HTTP {response.status_code}: {response.text[:200]}")
+                raise Exception(f"GEMINI_ERROR_{response.status_code}")
+                
         except Exception as e:
-            print(f"⚠️ Gemini error: {str(e)[:100]}")
-            raise
-    
+            if attempt == max_retries:
+                print(f"⚠️ Gemini REST failure: {str(e)[:150]}")
+                raise
+            continue
+            
     return None
 
 
