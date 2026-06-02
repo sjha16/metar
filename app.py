@@ -11,7 +11,7 @@ from pathlib import Path
 from gtts import gTTS
 import streamlit_analytics2 as streamlit_analytics
 
-from src.fetcher import fetch_metar, fetch_taf
+from src.fetcher import fetch_metar, fetch_taf, fetch_airport_info
 from src.agent import (
     analyze_metar_orchestrator,
     get_ai_status,
@@ -50,6 +50,7 @@ def init_session_state():
     defaults = {
         "analysis": None,
         "station_loaded": "",
+        "airport_name": "",
         "raw_metar": "",
         "raw_taf": "",
         "search_history": [],
@@ -285,6 +286,15 @@ def fetch_weather_data(icao: str):
         raw_metar = fetch_metar(icao)
         raw_taf = fetch_taf(icao)
         
+        # Fetch airport name
+        airport_name = ""
+        try:
+            airport_info = fetch_airport_info(icao)
+            if airport_info and "name" in airport_info:
+                airport_name = airport_info["name"]
+        except Exception:
+            pass
+        
         # Check for fetch errors
         if "Error" in raw_metar:
             st.error(f"❌ METAR Fetch Failed: {raw_metar}")
@@ -316,6 +326,7 @@ def fetch_weather_data(icao: str):
             # Store in session state
             st.session_state.analysis = analysis
             st.session_state.station_loaded = icao
+            st.session_state.airport_name = airport_name
             st.session_state.raw_metar = raw_metar
             st.session_state.raw_taf = raw_taf
             st.session_state.audio_generated = False
@@ -529,7 +540,12 @@ def display_analysis_results():
     analysis_data = analysis.get("analysis", analysis)
     
     # Success message
-    st.success(f"✅ Weather Analysis Complete for {analysis_data.get('station', 'Unknown')}")
+    station = analysis_data.get('station', 'Unknown')
+    airport_name = st.session_state.get("airport_name", "")
+    if airport_name:
+        st.success(f"✅ Weather Analysis Complete for {station} - {airport_name}")
+    else:
+        st.success(f"✅ Weather Analysis Complete for {station}")
     
     st.divider()
     
