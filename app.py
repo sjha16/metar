@@ -735,87 +735,122 @@ def main():
                 """)
         
         # =====================================================================
-        # 🎓 PERMANENT GROUND SCHOOL KNOWLEDGE BASE (FOR STUDENT SELF-DECODING)
+        # 🎓 COMPREHENSIVE GROUND SCHOOL REFERENCE DESK & EXTERNAL RESOURCES
         # =====================================================================
         st.divider()
         with st.expander("🎓 ATC Ground School Reference Desk (Click to Expand)", expanded=False):
             st.markdown("### 🎓 ATC Ground School Reference Desk")
-            st.caption("Use this interactive blueprint to practice decoding the raw weather logs above by yourself.")
+            st.caption("Use this interactive blueprint to practice decoding raw weather logs and studying official aviation frameworks.")
 
-            # Create clean, mobile-friendly tabs for different report types
-            tab1, tab2, tab3, tab4 = st.tabs(["📝 METAR", "🔮 TAF", "🚨 SPECI", "📚 Glossary Table"])
+            # Updated to 6 interactive, mobile-friendly tabs covering all major reports
+            tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+                "📝 METAR", "🔮 TAF", "🚨 SPECI", "⛈️ SIGMET/AIRMET", "📚 Glossary Table", "🌐 Web References"
+            ])
 
             with tab1:
                 st.subheader("How to Decode a METAR")
                 st.markdown("""
-                A **METAR** (Aviation Routine Weather Report) is an alphanumeric observation statement issued globally at fixed hourly or half-hourly intervals.
+                A **METAR** (Aviation Routine Weather Report) is an alphanumeric observation statement issued globally at fixed hourly or half-hourly intervals[cite: 377, 378].
                 
                 **Standard Sequence Blueprint:**
                 `TYPE` ➡️ `ICAO` ➡️ `TIME` ➡️ `WIND` ➡️ `VISIBILITY` ➡️ `WEATHER` ➡️ `CLOUDS` ➡️ `TEMP/DEW` ➡️ `QNH` ➡️ `TREND`
                 
-                * **Example Analyzed:** `METAR VECC 020830Z 11007KT 3800 HZ SCT020 32/26 Q1007 NOSIG`
-                    * **VECC:** Station identifier (Kolkata).
+                * **Example Analyzed:** `METAR VECC 020830Z 11007KT 3800 HZ SCT020 32/26 Q1007 NOSIG` [cite: 134, 167]
+                    * **VECC:** Station identifier (Kolkata)[cite: 134].
                     * **020830Z:** 2nd day of the month at 08:30 Zulu (UTC) time.
-                    * **11007KT:** Wind coming from 110 degrees at 7 knots.
-                    * **3800 HZ:** Visibility 3,800 meters due to Haze.
-                    * **SCT020:** Scattered clouds at 2,000 feet.
-                    * **32/26:** Air temperature 32°C, Dew point 26°C. (When close together, watch for fog!).
-                    * **Q1007:** Altimeter setting / QNH is 1007 Hectopascals.
-                    * **NOSIG:** No Significant Change expected over the next two hours.
+                    * **11007KT:** Wind coming from 110 degrees at 7 knots[cite: 246].
+                    * **3800 HZ:** Visibility 3,800 meters due to Haze[cite: 134, 246].
+                    * **SCT020:** Scattered clouds at 2,000 feet[cite: 234].
+                    * **32/26:** Air temperature 32°C, Dew point 26°C[cite: 167]. (When close together, relative humidity is near 100%—watch for fog/mist formation!).
+                    * **Q1007:** Altimeter setting / QNH is 1007 Hectopascals[cite: 167, 617].
+                    * **NOSIG:** No Significant Change expected over the next two hours[cite: 234].
                 """)
 
             with tab2:
                 st.subheader("How to Decode a TAF")
                 st.markdown("""
-                A **TAF** (Terminal Aerodrome Forecast) is a comprehensive statement of forecast meteorological conditions significant to aviation, typically covering a 24 to 30-hour period.
+                A **TAF** (Terminal Aerodrome Forecast) is a statement of forecast meteorological conditions significant to aviation, typically covering a 24 to 30-hour period[cite: 412, 575].
                 
                 **Key Change Identifiers to Know:**
                 * **FM (From):** Used to indicate a rapid, permanent change starting exactly at a specific hour and minute.
-                * **BECMG (Becoming):** Indicates a gradual evolution of weather parameters over a specific period (usually 1 to 2 hours).
-                * **TEMPO (Temporary):** Frequent, temporary fluctuations lasting less than an hour at a time and covering less than half of the total forecast period.
+                * **BECMG (Becoming):** Indicates a gradual evolution of weather parameters over a specific period (usually 1 to 2 hours)[cite: 583, 621].
+                * **TEMPO (Temporary):** Frequent, temporary fluctuations lasting less than an hour at a time and covering less than half of the total forecast period[cite: 578, 621].
                 
                 **Example Complex Block:**
-                `TEMPO 0110/0114 14010G20KT 2500 -TSRA FEW035CB`
-                * **Meaning:** Temporarily between the 1st day at 10:00Z and the 1st day at 14:00Z, winds will be 140 degrees at 10 knots gusting to 20 knots, visibility dropping to 2,500 meters in light thunderstorms and rain, with dangerous Cumulonimbus storm cells at 3,500 feet.
+                `TEMPO 0110/0114 14010G20KT 2500 -TSRA FEW035CB` [cite: 569]
+                * **Meaning:** Temporarily between the 1st day at 10:00Z and the 1st day at 14:00Z [cite: 578], winds will be 140 degrees at 10 knots gusting to 20 knots [cite: 580], visibility dropping to 2,500 meters in light thunderstorms and rain [cite: 581], with dangerous Cumulonimbus storm cells at 3,500 feet[cite: 582].
                 """)
 
             with tab3:
                 st.subheader("How to Identify a SPECI")
                 st.markdown("""
-                A **SPECI** is an **Aviation Special Weather Report**. Unlike a regular METAR which is scheduled, a SPECI is issued *instantly* the moment a critical safety threshold is breached.
+                A **SPECI** is an **Aviation Special Weather Report**[cite: 383]. Unlike a regular METAR which is scheduled [cite: 378], a SPECI is issued *instantly* the moment a critical safety threshold is breached[cite: 383].
                 
                 **What triggers a SPECI operational alert?**
-                1.  **Wind Shift:** Wind direction changes by 60 degrees or more in 10 minutes, or a sudden heavy gust begins.
-                2.  **Visibility Drops:** Visibility falls below critical instrument markers (e.g., dropping below 5000m, 3000m, or 1500m).
-                3.  **Ceiling Changes:** Cloud base drops below 1,000 feet (pushing the field into sudden IFR status).
-                4.  **Severe Weather Begins:** The sudden onset of thunderstorms (TS), freezing rain (FZRA), or wind shear.
+                1. **Wind Shift:** Wind direction changes by 60 degrees or more in 10 minutes, or a sudden heavy gust begins.
+                2. **Visibility Drops:** Visibility falls below critical operational markers (e.g., dropping below 5000m, 3000m, or 1500m)[cite: 250].
+                3. **Ceiling Changes:** Cloud base drops below 1,000 feet (pushing the field into sudden Instrument Flight Rules / IFR status)[cite: 134, 486].
+                4. **Severe Weather Begins:** The sudden onset of thunderstorms (TS), freezing rain (FZRA), squalls, or wind shear[cite: 41].
                 """)
 
             with tab4:
-                st.subheader("Master Aviation Glossary Map")
-                st.markdown("Match these exact code characters against your raw top headers to test your vocabulary:")
+                st.subheader("Enroute Hazards: SIGMET vs. AIRMET")
+                st.markdown("""
+                While METAR and TAF focus strictly on an individual airport terminal area[cite: 377, 412], **SIGMETs** and **AIRMETs** inform pilots about severe enroute safety hazards across an entire flight information region (FIR).
                 
-                # Organize definitions cleanly inside mobile cards
+                ### ⛈️ SIGMET (Significant Meteorological Information)
+                Issued for severe, high-consequence weather hazards that affect **all aircraft** (commercial airliners and student pilots alike):
+                * Severe active thunderstorms or heavy hail lines[cite: 5].
+                * Severe turbulence or low-level wind shear[cite: 41].
+                * Severe icing conditions.
+                * Volcanic ash clouds or sandstorms.
+                
+                ### ✈️ AIRMET (Airmen's Meteorological Information)
+                Issued for moderate weather hazards. These are critical for **student pilots** or light aircraft flying under visual rules:
+                * **AIRMET Sierra (SI):** Widespread mountain obscuration or ceilings dropping below 1,000 feet / visibility below 3 statute miles over a wide area.
+                * **AIRMET Tango (TA):** Moderate turbulence, sustained surface winds of 30 knots or greater, or non-convective low-level wind shear.
+                * **AIRMET Zulu (ZU):** Moderate icing conditions and freezing level heights.
+                """)
+
+            with tab5:
+                st.subheader("Master Aviation Glossary Map")
+                st.markdown("Match these exact code characters against your raw top headers to test your vocabulary[cite: 626]:")
+                
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("""
                     **Cloud Cover Thresholds:**
-                    * **SKC / CLR:** Sky Clear / Clear Skies
-                    * **FEW:** Few clouds (1/8 to 2/8 sky coverage)
-                    * **SCT:** Scattered clouds (3/8 to 4/8 coverage)
-                    * **BKN:** Broken ceiling layer (5/8 to 7/8 coverage - *Constitutes a ceiling*)
-                    * **OVC:** Overcast ceiling layer (8/8 complete coverage)
+                    * **SKC / CLR:** Sky Clear / Clear Skies [cite: 626]
+                    * **FEW:** Few clouds (1/8 to 2/8 sky coverage) [cite: 626]
+                    * **SCT:** Scattered clouds (3/8 to 4/8 coverage) [cite: 626]
+                    * **BKN:** Broken ceiling layer (5/8 to 7/8 coverage - *Constitutes a ceiling*) [cite: 626]
+                    * **OVC:** Overcast ceiling layer (8/8 complete coverage) [cite: 626]
                     """)
                 with col2:
                     st.markdown("""
                     **Weather Phenomenon Codes:**
-                    * **HZ:** Haze
-                    * **BR:** Mist (Visibility ≥ 1000m)
-                    * **FG:** Fog (Visibility < 1000m)
-                    * **RA / DZ:** Rain / Drizzle
-                    * **TS:** Thunderstorm
-                    * **CB:** Cumulonimbus (Dangerous Convective Storm Cells)
+                    * **HZ:** Haze [cite: 626]
+                    * **BR:** Mist (Visibility ≥ 1000m) [cite: 626]
+                    * **FG:** Fog (Visibility < 1000m) [cite: 626]
+                    * **RA / DZ:** Rain / Drizzle [cite: 626]
+                    * **TS:** Thunderstorm [cite: 626]
+                    * **CB:** Cumulonimbus (Dangerous Convective Storm Cells) [cite: 626]
                     """)
+
+            with tab6:
+                st.subheader("🌐 Official Aviation Weather Reference Libraries")
+                st.markdown("""
+                For deeper self-study, checkride preparation, or looking up live regional radar maps, bookmark these official government and institutional aviation portals:
+                
+                1. **[NOAA Aviation Weather Center (AWC)](https://aviationweather.gov/)**
+                   * The gold standard system used by your app[cite: 37, 372]. Use their **'Tools'** menu to view interactive global graphical forecasts (GFA), ceiling/visibility matrices, and live SIGMET plotting charts.
+                2. **[FAA Aviation Weather Services Advisory Circular (AC 00-45H)](https://www.faa.gov/)**
+                   * The definitive legal blueprint text document that defines exactly how every single alphanumeric symbol in a METAR, TAF, or PIREP (Pilot Report) must be coded and read. Perfect for ground school exams.
+                3. **[SKYbrary Aviation Safety Reference](https://skybrary.aero/)**
+                   * An elite knowledge base created by Eurocontrol and ICAO. Search their wiki for entries on *'Flight Categories (VFR/IFR)'* and *'SPECI criteria'* to read comprehensive deep-dives into operational definitions.
+                4. **[WMO Manual on Codes (WMO-No. 306)](https://wmo.int/)**
+                   * The official global treaty framework documenting international standard formatting rules for meteorological messages used across global towers[cite: 373, 378].
+                """)
 
 
 # ============================================
