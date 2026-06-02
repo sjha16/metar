@@ -108,7 +108,7 @@ def render_sidebar():
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/airplane-take-off.png", width=80)
         st.markdown("### 🛫 ATC Weather Assistant")
-        st.caption("AI-Powered Pilot Briefing System")
+        st.caption("AI-Powered Pilot?ATC Briefing System")
         
         st.divider()
         
@@ -215,7 +215,7 @@ def render_sidebar():
         with col1:
             st.metric("🌍 Airports Covered", "9,500+")
         with col2:
-            st.metric("🤖 AI Models", "3")
+            st.metric("🤖 AI Models", "4")
             
         st.metric("💰 Cost to You", "100% Free Forever")
         
@@ -255,7 +255,7 @@ def render_sidebar():
         
         # Footer
         st.caption("Data from aviationweather.gov")
-        st.caption("AI by Gemini & Groq (Free Tier)")
+        st.caption("AI by Gemini, Groq, OpenAI & DeepSeek")
         st.caption(f"Session requests: {st.session_state.request_count}")
         
         # Reset button
@@ -718,7 +718,7 @@ def main():
             with col1:
                 st.markdown("""
                 ### 🤖 AI Analysis
-                Dual-engine AI (Gemini + Groq) decodes METAR/TAF into plain English with 
+                Quad-engine AI (Gemini, Groq, OpenAI & DeepSeek) decodes METAR/TAF into plain English with 
                 student pilot recommendations.
                 """)
             with col2:

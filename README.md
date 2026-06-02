@@ -21,8 +21,8 @@ Aviation weather reports (METAR and TAF) are notoriously cryptic. Reading them i
 
 ## ✨ Core Selling Points & Features
 
-### 🤖 1. Dual-Engine AI Decoders
-Never see "AI unavailable" errors. The app runs a primary analysis via **Google Gemini 2.5 Flash**, backed by an automatic failover sequence to **Groq (Llama 3.3)** and **DeepSeek**, and falls back to a precise local regex parser if the internet is completely offline.
+### 🤖 1. Quad-Engine AI Decoders
+Never see "AI unavailable" errors. The app runs a primary analysis via **Google Gemini 2.5 Flash**, backed by an automatic failover sequence to **Groq (Llama 3.3)**, **OpenAI (GPT-4o-mini)**, and **DeepSeek**, and falls back to a precise local regex parser if the internet is completely offline.
 
 ### 🛡️ 2. Smart Student Safety Evaluator (GO / NO-GO)
 Input an ICAO code and get an immediate, definitive safety decision. The system evaluates:
@@ -51,8 +51,8 @@ graph TD
     Cache -- L2 Miss / Stale --> Queue{Layer 3: Request Queue}
     Queue -- Wait in FIFO --> Wait[event.wait Blocked]
     Queue -- Free Slot (< 5 active) --> AI[AI Orchestrator]
-    AI --> Gemini & Groq & DeepSeek
-    Gemini & Groq & DeepSeek --> Success[Update Cache & Release Slot]
+    AI --> Gemini & Groq & OpenAI & DeepSeek
+    Gemini & Groq & OpenAI & DeepSeek --> Success[Update Cache & Release Slot]
     AI -- All Overloaded --> Fallback[Layer 4/5: Basic Regex Parser]
 ```
 
@@ -65,7 +65,7 @@ graph TD
 ## 🛠️ Technology Stack
 
 * **Frontend UI**: Streamlit (Ultra-premium custom styling, custom tailormade HSL color palette, dark mode styles).
-* **AI Orchestration**: Google GenAI SDK (Gemini 2.5), Groq SDK (Llama 3.3), OpenAI SDK (DeepSeek).
+* **AI Orchestration**: Google GenAI SDK (Gemini 2.5), Groq SDK (Llama 3.3), OpenAI SDK (GPT-4o-mini and DeepSeek).
 * **Schema Validation**: Pydantic v2.
 * **Voice Synthesis**: gTTS (Google Text-to-Speech).
 * **Data Provider**: Live Aviation Weather Center API (aviationweather.gov).
