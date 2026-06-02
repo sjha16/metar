@@ -165,20 +165,9 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
    - If borderline → Return "MARGINAL - CONSULT INSTRUCTOR"
 
 3. EDUCATIONAL INSIGHTS (TEACHING VALUE):
-   - You MUST generate a comprehensive, highly structured "Line-by-Line Breakdown" of the weather codes (especially the TAF blocks, but also the METAR).
-   - Begin with the bold title: "### 📝 The Line-by-Line Breakdown"
-   - Go through each logical period/line of the weather reports, numbering them sequentially (e.g., "1. The Base Indicator & Validity Period", "2. The Thunderstorm Hazard (TEMPO)", "3. The Evening Transition (BECMG)", etc.).
-   - Under each section, output the raw code block on a separate line under a bold "Plaintext" header.
-   - For every individual code element inside that raw block (e.g., station name, date/time, wind speed/direction, gusts, visibility, cloud layers, and weather hazards), list the element followed by a detailed, easy-to-understand breakdown in plain English (e.g., "TAF VIDP: Terminal Aerodrome Forecast for...", "010500Z: Issued on...", "10010KT: Base winds are...", "6000: Ground visibility is forecast at...").
-   - Follow this exact formatting style for each section:
-     X. [Section Title]
-     **Plaintext**
-     [raw code block]
-     [code element 1]: [detailed plaintext explanation]
-     [code element 2]: [detailed plaintext explanation]
-     ...
-   - Do not omit any elements; ensure every single part of the reported code is explained line by line.
-   - Conclude at the very end of the insights with ONE mock private pilot checkride oral exam question and answer based on this SPECIFIC weather. Format it clearly as:
+   - You MUST generate a brief, high-value educational insight about a key weather parameter or hazard present in this report.
+   - Keep it to 2-3 clear, educational sentences.
+   - Conclude at the end of the insights with ONE mock private pilot checkride oral exam question and answer based on this SPECIFIC weather. Format it clearly as:
      "**Checkride Q:** [challenging checkride question about a code or safety implication in this report]\n**Checkride A:** [complete, accurate checkride answer]"
 
 4. PERTINENT ATC INFORMATION:
@@ -982,16 +971,16 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "", use_cache: boo
             "emoji": "🤖"
         },
         {
-            "name": "openai",
-            "key": OPENAI_KEY,
-            "callable": _call_openai,
-            "emoji": "🧠"
-        },
-        {
             "name": "groq",
             "key": GROQ_KEY,
             "callable": _call_groq,
             "emoji": "⚡"
+        },
+        {
+            "name": "openai",
+            "key": OPENAI_KEY,
+            "callable": _call_openai,
+            "emoji": "🧠"
         },
         {
             "name": "deepseek",
