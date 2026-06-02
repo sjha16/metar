@@ -438,24 +438,43 @@ def _call_openai(combined_content: str) -> Optional[str]:
             f"Remember: Return ONLY the JSON object, no additional text."
         )
         
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a JSON-only aviation weather analyst. Always return complete, valid JSON with all required fields. Never include text outside the JSON object."
-                },
-                {
-                    "role": "user",
-                    "content": prompt_with_schema
-                }
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-            max_tokens=2000
-        )
-        
-        content = response.choices[0].message.content
+        # Try utilizing OpenAI's native Structured Outputs for 100% schema enforcement
+        try:
+            response = client.beta.chat.completions.parse(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a JSON-only aviation weather analyst. Always return complete, valid JSON with all required fields matching the schema. Never include text outside the JSON object."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Analyze this weather data:\n{combined_content}\n\nCRITICAL SYSTEM RULES:\n{SYSTEM_INSTRUCTION}"
+                    }
+                ],
+                response_format=METARAnalysis,
+                temperature=0.0
+            )
+            content = response.choices[0].message.content
+        except AttributeError:
+            # Fallback if the local openai library version doesn't support .parse
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a JSON-only aviation weather analyst. Always return complete, valid JSON with all required fields. Never include text outside the JSON object."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt_with_schema
+                    }
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0,
+                max_tokens=2000
+            )
+            content = response.choices[0].message.content
         
         if content:
             try:
