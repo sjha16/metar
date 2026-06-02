@@ -407,6 +407,7 @@ def _call_groq(combined_content: str) -> Optional[str]:
         
         # Validate it's actual JSON
         if content:
+            content = _clean_json_string(content)
             try:
                 json.loads(content)
                 return content
@@ -495,6 +496,7 @@ def _call_openai(combined_content: str) -> Optional[str]:
             content = response.choices[0].message.content
         
         if content:
+            content = _clean_json_string(content)
             try:
                 json.loads(content)
                 return content
@@ -519,6 +521,16 @@ def _call_openai(combined_content: str) -> Optional[str]:
         raise
 
 
+def _clean_json_string(s: str) -> str:
+    """
+    Clean JSON string by replacing non-breaking spaces (\xa0) and
+    zero-width spaces (\u200b) with standard spacing.
+    """
+    if not s:
+        return ""
+    return s.replace('\xa0', ' ').replace('\u200b', '').strip()
+
+
 def _extract_json_bruteforce(content: str) -> Optional[str]:
     """
     Extracts JSON from a string by finding the first '{' and last '}'.
@@ -526,6 +538,7 @@ def _extract_json_bruteforce(content: str) -> Optional[str]:
     """
     if not content:
         return None
+    content = _clean_json_string(content)
     try:
         start = content.find('{')
         end = content.rfind('}')
@@ -600,6 +613,7 @@ CRITICAL: Output ONLY the JSON object. No other text."""
             print("⚠️ DeepSeek returned empty response")
             return None
         
+        content = _clean_json_string(content)
         # Validate it's proper JSON
         try:
             # Try parsing directly
@@ -956,8 +970,10 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
     Returns structured dict with status metadata.
     """
     try:
+        # Pre-clean string of hidden non-breaking and zero-width spaces
+        clean_response = _clean_json_string(ai_response)
         # Parse JSON
-        data = json.loads(ai_response)
+        data = json.loads(clean_response)
         
         # Standardize keys in case the model used variations (e.g. when response_schema is disabled)
         key_mappings = {
@@ -1026,7 +1042,7 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
         
         # Try to return partial data
         try:
-            partial_data = json.loads(ai_response)
+            partial_data = json.loads(clean_response)
             return {
                 "status": "partial",
                 "provider": provider,
