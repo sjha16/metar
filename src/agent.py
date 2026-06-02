@@ -748,9 +748,150 @@ def _basic_metar_parse(raw_metar: str, raw_taf: str = None) -> Dict[str, Any]:
     else:
         qnh = "Altimeter setting unavailable"
     
-    # Flight category
-    flight_category = "UNABLE TO DETERMINE - Exercise caution"
+    # 1. Parse Wind Numeric Details for Recommendation
+    wind_speed = 0
+    wind_gust = 0
+    gust_spread = 0
+    if wind_match:
+        try:
+            wind_speed = int(wind_match.group(2))
+            if wind_match.group(4):
+                wind_gust = int(wind_match.group(4))
+                gust_spread = wind_gust - wind_speed
+            else:
+                wind_gust = wind_speed
+        except ValueError:
+            pass
+    elif vrb_match:
+        try:
+            wind_speed = int(vrb_match.group(1))
+            wind_gust = wind_speed
+        except ValueError:
+            pass
+
+    # 2. Parse Visibility in Meters for Flight Category and Recommendation
+    visibility_m = 10000.0  # Default to 10km (VFR)
+    if 'CAVOK' in raw_metar:
+        visibility_m = 10000.0
+    elif sm_match:
+        try:
+            val_str = sm_match.group(2)
+            val_str = re.sub(r'\s+', ' ', val_str).strip()
+            parts = val_str.split(' ')
+            total_sm = 0.0
+            for p in parts:
+                if '/' in p:
+                    num, denom = p.split('/')
+                    total_sm += float(num) / float(denom)
+                else:
+                    total_sm += float(p)
+            visibility_m = total_sm * 1609.34
+        except Exception:
+            pass
+    elif km_match:
+        try:
+            visibility_m = float(km_match.group(1)) * 1000.0
+        except Exception:
+            pass
+    elif meter_match:
+        try:
+            visibility_m = float(meter_match.group(1))
+        except Exception:
+            pass
+
+    # 3. Parse Cloud Ceiling in Feet for Flight Category and Recommendation
+    ceiling_ft = 99999.0  # Default to infinite ceiling (no ceiling)
+    if 'CAVOK' in raw_metar:
+        ceiling_ft = 99999.0
+    else:
+        bkn_ovc_matches = re.findall(r'(BKN|OVC)(\d{3})', raw_metar)
+        if bkn_ovc_matches:
+            ceiling_heights = []
+            for layer_type, height_code in bkn_ovc_matches:
+                try:
+                    height_ft = int(height_code) * 100
+                    ceiling_heights.append(height_ft)
+                except ValueError:
+                    pass
+            if ceiling_heights:
+                ceiling_ft = float(min(ceiling_heights))
+
+    # 4. Check for Significant Weather
+    has_sig_wx = False
+    sig_wx_codes = ['TS', 'RA', 'DZ', 'SN', 'FG', 'BR', 'HZ', 'FU', 'SQ', 'FC', 'GR', 'GS', 'PL']
+    metar_words = raw_metar.split()
+    for word in metar_words[2:]:  # skip station and type
+        clean_word = re.sub(r'^[+-]|VC', '', word)
+        for code in sig_wx_codes:
+            if clean_word == code or (len(clean_word) > 2 and code in clean_word and not clean_word.endswith('KT') and not clean_word.endswith('SM') and not clean_word.startswith('Q') and not clean_word.startswith('A')):
+                has_sig_wx = True
+                break
+
+    # 5. Determine Flight Category
+    if visibility_m < 1600.0 or ceiling_ft < 500.0:
+        flight_category = "LIFR"
+    elif visibility_m < 5000.0 or ceiling_ft < 1000.0:
+        flight_category = "IFR"
+    elif visibility_m >= 8000.0 and ceiling_ft >= 3000.0 and not has_sig_wx:
+        flight_category = "VFR"
+    else:
+        flight_category = "MVFR"
+
+    # 6. Evaluate Student Pilot Personal Minimums
+    reasons = []
     
+    # Visibility (Min 5 SM / 8000m)
+    if visibility_m < 8000.0:
+        reasons.append(f"Visibility is below student pilot minimum of 5 SM (measured: {visibility_m/1609.34:.1f} SM / {visibility_m:.0f} meters)")
+        
+    # Ceiling (Min 3,000 ft)
+    if ceiling_ft < 3000.0:
+        reasons.append(f"Ceiling is below student pilot minimum of 3,000 feet (measured: {ceiling_ft:,.0f} feet)")
+        
+    # Wind limit (Max crosswind conservative limit: sustained wind speed > 10 KT)
+    if wind_speed > 10:
+        reasons.append(f"Sustained wind speed is {wind_speed} knots, which exceeds the student maximum crosswind limit of 10 knots (potential crosswind exceedance depending on runway alignment)")
+        
+    # Wind gust spread (Max 10 KT spread)
+    if gust_spread > 10:
+        reasons.append(f"Wind gust spread is {gust_spread} knots (sustained {wind_speed}KT, gusting to {wind_gust}KT), which exceeds the student pilot limit of 10 knots")
+        
+    # Severe Weather
+    has_thunderstorm = 'TS' in raw_metar
+    has_convective = 'CB' in raw_metar or 'TCU' in raw_metar
+    has_wind_shear = 'WS' in raw_metar
+    has_icing = 'FZ' in raw_metar
+    
+    if has_thunderstorm:
+        reasons.append("Thunderstorms are reported at the station (TS)")
+    if has_convective:
+        reasons.append("Convective cloud cells are reported (CB/TCU)")
+    if has_wind_shear:
+        reasons.append("Low-level wind shear is reported (WS)")
+    if has_icing:
+        reasons.append("Potential icing/freezing conditions are reported (FZ)")
+        
+    # Build Flight Recommendation
+    if reasons:
+        flight_recommendation = "❌ NO-GO\n\nBreaches of student pilot personal minimums:\n" + "\n".join(f"- {r}" for r in reasons)
+    else:
+        is_marginal = False
+        marginal_reasons = []
+        if wind_speed == 10:
+            is_marginal = True
+            marginal_reasons.append("Wind is exactly at the 10-knot threshold")
+        if 3000.0 <= ceiling_ft <= 4000.0:
+            is_marginal = True
+            marginal_reasons.append(f"Ceiling is marginal ({ceiling_ft:,.0f} feet)")
+        if 8000.0 <= visibility_m <= 9000.0:
+            is_marginal = True
+            marginal_reasons.append(f"Visibility is marginal ({visibility_m/1609.34:.1f} SM)")
+            
+        if is_marginal:
+            flight_recommendation = "⚠️ MARGINAL - CONSULT INSTRUCTOR\n\nMarginal conditions noted:\n" + "\n".join(f"- {mr}" for mr in marginal_reasons)
+        else:
+            flight_recommendation = "✅ GO\n\nAll conditions are well within novice student pilot personal minimums. Have a great flight!"
+
     # Forecast trend
     if raw_taf and len(raw_taf) > 20:
         forecast_trend = f"TAF available but could not be analyzed. First portion: {raw_taf[:150]}..."
@@ -768,12 +909,7 @@ def _basic_metar_parse(raw_metar: str, raw_taf: str = None) -> Dict[str, Any]:
         "qnh": qnh,
         "flight_category": flight_category,
         "forecast_trend": forecast_trend,
-        "flight_recommendation": (
-            "⚠️ AUTOMATED FALLBACK - AI ANALYSIS UNAVAILABLE. "
-            "Cannot provide safety recommendation without AI interpretation. "
-            "Student pilots must consult a certified flight instructor or official weather briefing."
-        ),
-
+        "flight_recommendation": flight_recommendation,
         "pertinent_information": (
             "⚠️ BASIC AUTOMATED ANALYSIS ONLY. "
             "Verify all information with official aviation weather sources before flight. "
