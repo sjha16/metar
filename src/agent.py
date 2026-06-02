@@ -313,7 +313,7 @@ def _call_gemini(combined_content: str) -> Optional[str]:
         "generationConfig": {
             "responseMimeType": "application/json",
             "temperature": 0.0,
-            "maxOutputTokens": 2000
+            "maxOutputTokens": 8000
         }
     }
     
@@ -324,7 +324,6 @@ def _call_gemini(combined_content: str) -> Optional[str]:
                 time.sleep(retry_delay * attempt)
                 
             response = requests.post(url, headers=headers, json=payload, timeout=30)
-            
             if response.status_code == 200:
                 data = response.json()
                 # Check for prompt block
@@ -1011,7 +1010,7 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
         
     except json.JSONDecodeError as e:
         print(f"⚠️ JSON parse error from {provider}: {str(e)[:100]}")
-        print(f"   Raw response snippet: {repr(ai_response[:200])}...")
+        print(f"   Raw response: {repr(ai_response)}")
         return {
             "status": "error",
             "error_code": "JSON_PARSE_ERROR",
