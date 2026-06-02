@@ -299,26 +299,17 @@ def _call_gemini(combined_content: str) -> Optional[str]:
             
             client = genai.Client(api_key=GEMINI_KEY)
             
-            # Convert Pydantic schema to detailed JSON instructions for unconstrained JSON mode
-            schema_fields = list(METARAnalysis.model_fields.keys())
-            schema_description = {}
-            for field in schema_fields:
-                schema_description[field] = METARAnalysis.model_fields[field].description
-            
-            prompt_with_schema = (
-                f"Analyze this aviation weather data and output a JSON object with these EXACT 12 fields:\n\n"
-                f"{combined_content}\n\n"
-                f"Output this JSON structure (replace values with your analysis):\n"
-                f"{json.dumps(schema_description, indent=2)}\n\n"
-                f"Remember: Output ONLY the JSON object. No other text or markdown wrapping."
-            )
-            
             response = client.models.generate_content(
                 model='gemini-2.5-flash',  # Fastest model
-                contents=prompt_with_schema,
+                contents=(
+                    f"Analyze this raw airport weather data and populate the comprehensive "
+                    f"aviation assistant format. Provide thorough, accurate analysis for every field.\n\n"
+                    f"WEATHER DATA:\n{combined_content}"
+                ),
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,  # Keep full system instructions for 100% accurate pilot safety checks!
                     response_mime_type="application/json",
+                    response_schema=METARAnalysis,
                     temperature=0.0,
                     max_output_tokens=2000,  # Limit output size for speed
                 ),
