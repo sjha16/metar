@@ -302,7 +302,7 @@ def _call_gemini(combined_content: str) -> Optional[str]:
                     response_mime_type="application/json",
                     response_schema=METARAnalysis,
                     temperature=0.0,
-                    max_output_tokens=800,  # Limit output size for speed
+                    max_output_tokens=2000,  # Limit output size for speed
                 ),
             )
             
@@ -476,7 +476,7 @@ CRITICAL: Output ONLY the JSON object. No other text."""
                 }
             ],
             temperature=0.0,
-            max_tokens=800,
+            max_tokens=2000,
             response_format={"type": "json_object"}  # Native JSON mode
         )
         
@@ -841,13 +841,17 @@ def analyze_metar_orchestrator(raw_metar: str, raw_taf: str = "", use_cache: boo
                 if result:
                     print(f"   ✅ {provider['name']} success!")
                     response = _validate_and_parse(result, provider["name"])
-                    response["rate_limit_stats"] = rate_limiter.get_stats()
                     
-                    # If it's a fallback provider, mark fallback_used
-                    if provider["name"] != "gemini":
-                        response["fallback_used"] = True
+                    if response and response.get("status") in ["success", "partial"]:
+                        response["rate_limit_stats"] = rate_limiter.get_stats()
                         
-                    return response
+                        # If it's a fallback provider, mark fallback_used
+                        if provider["name"] != "gemini":
+                            response["fallback_used"] = True
+                            
+                        return response
+                    else:
+                        print(f"   ⚠️ {provider['name']} validation failed, trying next provider...")
                 else:
                     print(f"   ⚠️ {provider['name']}: No result")
                     
