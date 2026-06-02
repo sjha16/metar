@@ -299,17 +299,26 @@ def _call_gemini(combined_content: str) -> Optional[str]:
             
             client = genai.Client(api_key=GEMINI_KEY)
             
+            # Convert Pydantic schema to detailed JSON instructions for unconstrained JSON mode
+            schema_fields = list(METARAnalysis.model_fields.keys())
+            schema_description = {}
+            for field in schema_fields:
+                schema_description[field] = METARAnalysis.model_fields[field].description
+            
+            prompt_with_schema = (
+                f"Analyze this aviation weather data and output a JSON object with these EXACT 12 fields:\n\n"
+                f"{combined_content}\n\n"
+                f"Output this JSON structure (replace values with your analysis):\n"
+                f"{json.dumps(schema_description, indent=2)}\n\n"
+                f"Remember: Output ONLY the JSON object. Do NOT use markdown code blocks or any other wrapping. Start your response with {{ and end with }}."
+            )
+            
             response = client.models.generate_content(
                 model='gemini-2.5-flash',  # Fastest model
-                contents=(
-                    f"Analyze this raw airport weather data and populate the comprehensive "
-                    f"aviation assistant format. Provide thorough, accurate analysis for every field.\n\n"
-                    f"WEATHER DATA:\n{combined_content}"
-                ),
+                contents=prompt_with_schema,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,  # Keep full system instructions for 100% accurate pilot safety checks!
                     response_mime_type="application/json",
-                    response_schema=METARAnalysis,
                     temperature=0.0,
                     max_output_tokens=2000,  # Limit output size for speed
                 ),
@@ -790,8 +799,46 @@ def _validate_and_parse(ai_response: str, provider: str) -> Dict[str, Any]:
         # Parse JSON
         data = json.loads(ai_response)
         
+        # Standardize keys in case the model used variations (e.g. when response_schema is disabled)
+        key_mappings = {
+            "station_id": "station",
+            "icao": "station",
+            "time": "time_of_observation",
+            "time_issued": "time_of_observation",
+            "observation_time": "time_of_observation",
+            "wind": "surface_wind",
+            "wind_conditions": "surface_wind",
+            "temperature": "temperature_dew_point",
+            "dew_point": "temperature_dew_point",
+            "altimeter": "qnh",
+            "altimeter_setting": "qnh"
+        }
+        
+        # Clean up and standardize keys & values
+        cleaned_data = {}
+        for k, v in data.items():
+            mapped_k = key_mappings.get(k, k)
+            if isinstance(v, dict):
+                # Flatten dictionary into a spoken sentence
+                cleaned_data[mapped_k] = ", ".join(f"{str(nk).replace('_', ' ')}: {nv}" for nk, nv in v.items())
+            elif isinstance(v, list):
+                # Flatten list
+                items_str = []
+                for item in v:
+                    if isinstance(item, dict):
+                        items_str.append(", ".join(f"{str(nk).replace('_', ' ')}: {nv}" for nk, nv in item.items()))
+                    else:
+                        items_str.append(str(item))
+                cleaned_data[mapped_k] = "; ".join(items_str)
+            else:
+                cleaned_data[mapped_k] = str(v)
+                
+        # Handle special split temperature/dewpoint cases
+        if "temperature" in data and "dew_point" in data:
+            cleaned_data["temperature_dew_point"] = f"Temperature {data['temperature']} degrees Celsius, dew point {data['dew_point']} degrees Celsius"
+        
         # Validate against Pydantic schema
-        validated = METARAnalysis(**data)
+        validated = METARAnalysis(**cleaned_data)
         
         # Return success response
         return {
