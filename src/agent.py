@@ -549,17 +549,45 @@ def _basic_metar_parse(raw_metar: str, raw_taf: str = None) -> Dict[str, Any]:
             surface_wind = "Wind data unavailable"
     
     # Visibility
-    vis_match = re.search(r'(\d+)(SM|KM)', raw_metar)
-    if vis_match:
-        value = vis_match.group(1)
-        unit = "statute miles" if vis_match.group(2) == "SM" else "kilometers"
-        visibility = f"{value} {unit}"
-    elif re.search(r'9999', raw_metar):
-        visibility = "10 kilometers or greater"
-    elif re.search(r'CAVOK', raw_metar):
+    if 'CAVOK' in raw_metar:
         visibility = "Ceiling and Visibility OK (greater than 10 km)"
     else:
-        visibility = "Visibility data unclear"
+        # 1. North American visibility with SM (e.g., 10SM, P6SM, M1/4SM, 1 1/2SM, 1 1/2 SM, 2 1/2  SM)
+        sm_match = re.search(r'\b([PM])?(\d+(?:\s+\d+/\d+)?|\d+/\d+)\s*SM\b', raw_metar)
+        if sm_match:
+            prefix_code = sm_match.group(1)
+            value = sm_match.group(2)
+            
+            # Clean up double/multiple spaces in value
+            value = re.sub(r'\s+', ' ', value)
+            
+            prefix = ""
+            if prefix_code == 'P':
+                prefix = "greater than "
+            elif prefix_code == 'M':
+                prefix = "less than "
+                
+            unit = "statute mile" if value in ["1", "1/2", "1/4", "3/4", "1/8", "5/8"] else "statute miles"
+            visibility = f"{prefix}{value} {unit}"
+        else:
+            # 2. KM visibility (e.g., 10KM, 5KM)
+            km_match = re.search(r'\b(\d+)\s*KM\b', raw_metar)
+            if km_match:
+                value = km_match.group(1)
+                unit = "kilometer" if value == "1" else "kilometers"
+                visibility = f"{value} {unit}"
+            else:
+                # 3. 4-digit meter visibility (e.g., 9999, 4000, 0800, 1500)
+                # Often followed by directional suffix (e.g. 4000NE) or NDV
+                meter_match = re.search(r'\b(\d{4})(?:NDV|[NSEW]{1,2})?\b', raw_metar)
+                if meter_match:
+                    value = meter_match.group(1)
+                    if value == "9999":
+                        visibility = "10 kilometers or greater"
+                    else:
+                        visibility = f"{int(value)} meters"
+                else:
+                    visibility = "Visibility data unclear"
     
     # Clouds
     cloud_patterns = {
