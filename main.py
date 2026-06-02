@@ -130,7 +130,7 @@ if __name__ == "__main__":
 ╔══════════════════════════════════════════════╗
 ║  🛫  AVIATION WEATHER AI ASSISTANT  🛫     ║
 ║  AI-Powered METAR/TAF Briefing System       ║
-║  Gemini + Groq | aviationweather.gov        ║
+║  Gemini + Groq + OpenAI + DeepSeek          ║
 ╚══════════════════════════════════════════════╝
     """)
     

@@ -1,7 +1,7 @@
 """
 Aviation Weather AI Agent
 Multi-provider AI analysis of METAR/TAF data with robust fallback handling.
-Supports Gemini (primary) and Groq (fallback) - both free tiers.
+Supports Gemini, Groq, OpenAI, and DeepSeek.
 """
 
 import os
@@ -19,7 +19,7 @@ from src.queue_manager import request_queue
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-# Import Gemini & Groq Tools
+# Import AI Provider Tools
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
