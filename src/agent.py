@@ -703,6 +703,26 @@ def _basic_metar_parse(raw_metar: str, raw_taf: str = None) -> Dict[str, Any]:
                 else:
                     visibility = "Visibility data unclear"
     
+    # Append weather conditions to visibility if present (e.g. Haze, Mist, Fog)
+    wx_conditions = []
+    wx_map = {
+        'HZ': 'Haze',
+        'BR': 'Mist',
+        'FG': 'Fog',
+        'RA': 'Rain',
+        'DZ': 'Drizzle',
+        'SN': 'Snow',
+        'TS': 'Thunderstorms'
+    }
+    for word in raw_metar.split()[2:]:  # skip station and time
+        clean_word = re.sub(r'^[+-]|VC', '', word)
+        for code, name in wx_map.items():
+            if clean_word == code or (len(clean_word) > 2 and code in clean_word and not clean_word.endswith('KT') and not clean_word.endswith('SM') and not clean_word.startswith('Q') and not clean_word.startswith('A')):
+                if name not in wx_conditions:
+                    wx_conditions.append(name)
+    if wx_conditions and 'CAVOK' not in raw_metar:
+        visibility = f"{visibility} in {', '.join(wx_conditions)}"
+    
     # Clouds
     cloud_patterns = {
         'FEW': 'Few clouds',
