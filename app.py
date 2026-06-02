@@ -733,6 +733,89 @@ def main():
                 Generate audio briefings for hands-free 
                 weather review during pre-flight planning.
                 """)
+        
+        # =====================================================================
+        # 🎓 PERMANENT GROUND SCHOOL KNOWLEDGE BASE (FOR STUDENT SELF-DECODING)
+        # =====================================================================
+        st.divider()
+        with st.expander("🎓 ATC Ground School Reference Desk (Click to Expand)", expanded=False):
+            st.markdown("### 🎓 ATC Ground School Reference Desk")
+            st.caption("Use this interactive blueprint to practice decoding the raw weather logs above by yourself.")
+
+            # Create clean, mobile-friendly tabs for different report types
+            tab1, tab2, tab3, tab4 = st.tabs(["📝 METAR", "🔮 TAF", "🚨 SPECI", "📚 Glossary Table"])
+
+            with tab1:
+                st.subheader("How to Decode a METAR")
+                st.markdown("""
+                A **METAR** (Aviation Routine Weather Report) is an alphanumeric observation statement issued globally at fixed hourly or half-hourly intervals.
+                
+                **Standard Sequence Blueprint:**
+                `TYPE` ➡️ `ICAO` ➡️ `TIME` ➡️ `WIND` ➡️ `VISIBILITY` ➡️ `WEATHER` ➡️ `CLOUDS` ➡️ `TEMP/DEW` ➡️ `QNH` ➡️ `TREND`
+                
+                * **Example Analyzed:** `METAR VECC 020830Z 11007KT 3800 HZ SCT020 32/26 Q1007 NOSIG`
+                    * **VECC:** Station identifier (Kolkata).
+                    * **020830Z:** 2nd day of the month at 08:30 Zulu (UTC) time.
+                    * **11007KT:** Wind coming from 110 degrees at 7 knots.
+                    * **3800 HZ:** Visibility 3,800 meters due to Haze.
+                    * **SCT020:** Scattered clouds at 2,000 feet.
+                    * **32/26:** Air temperature 32°C, Dew point 26°C. (When close together, watch for fog!).
+                    * **Q1007:** Altimeter setting / QNH is 1007 Hectopascals.
+                    * **NOSIG:** No Significant Change expected over the next two hours.
+                """)
+
+            with tab2:
+                st.subheader("How to Decode a TAF")
+                st.markdown("""
+                A **TAF** (Terminal Aerodrome Forecast) is a comprehensive statement of forecast meteorological conditions significant to aviation, typically covering a 24 to 30-hour period.
+                
+                **Key Change Identifiers to Know:**
+                * **FM (From):** Used to indicate a rapid, permanent change starting exactly at a specific hour and minute.
+                * **BECMG (Becoming):** Indicates a gradual evolution of weather parameters over a specific period (usually 1 to 2 hours).
+                * **TEMPO (Temporary):** Frequent, temporary fluctuations lasting less than an hour at a time and covering less than half of the total forecast period.
+                
+                **Example Complex Block:**
+                `TEMPO 0110/0114 14010G20KT 2500 -TSRA FEW035CB`
+                * **Meaning:** Temporarily between the 1st day at 10:00Z and the 1st day at 14:00Z, winds will be 140 degrees at 10 knots gusting to 20 knots, visibility dropping to 2,500 meters in light thunderstorms and rain, with dangerous Cumulonimbus storm cells at 3,500 feet.
+                """)
+
+            with tab3:
+                st.subheader("How to Identify a SPECI")
+                st.markdown("""
+                A **SPECI** is an **Aviation Special Weather Report**. Unlike a regular METAR which is scheduled, a SPECI is issued *instantly* the moment a critical safety threshold is breached.
+                
+                **What triggers a SPECI operational alert?**
+                1.  **Wind Shift:** Wind direction changes by 60 degrees or more in 10 minutes, or a sudden heavy gust begins.
+                2.  **Visibility Drops:** Visibility falls below critical instrument markers (e.g., dropping below 5000m, 3000m, or 1500m).
+                3.  **Ceiling Changes:** Cloud base drops below 1,000 feet (pushing the field into sudden IFR status).
+                4.  **Severe Weather Begins:** The sudden onset of thunderstorms (TS), freezing rain (FZRA), or wind shear.
+                """)
+
+            with tab4:
+                st.subheader("Master Aviation Glossary Map")
+                st.markdown("Match these exact code characters against your raw top headers to test your vocabulary:")
+                
+                # Organize definitions cleanly inside mobile cards
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("""
+                    **Cloud Cover Thresholds:**
+                    * **SKC / CLR:** Sky Clear / Clear Skies
+                    * **FEW:** Few clouds (1/8 to 2/8 sky coverage)
+                    * **SCT:** Scattered clouds (3/8 to 4/8 coverage)
+                    * **BKN:** Broken ceiling layer (5/8 to 7/8 coverage - *Constitutes a ceiling*)
+                    * **OVC:** Overcast ceiling layer (8/8 complete coverage)
+                    """)
+                with col2:
+                    st.markdown("""
+                    **Weather Phenomenon Codes:**
+                    * **HZ:** Haze
+                    * **BR:** Mist (Visibility ≥ 1000m)
+                    * **FG:** Fog (Visibility < 1000m)
+                    * **RA / DZ:** Rain / Drizzle
+                    * **TS:** Thunderstorm
+                    * **CB:** Cumulonimbus (Dangerous Convective Storm Cells)
+                    """)
 
 
 # ============================================
