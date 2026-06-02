@@ -124,10 +124,7 @@ class METARAnalysis(BaseModel):
     flight_recommendation: str = Field(
         description="A strict Go/No-Go safety recommendation specifically tailored for an early student pilot. Must detail wind limits, runway visual ranges, ceiling constraints, and explain WHY."
     )
-    
-    educational_insights: str = Field(
-        description="A comprehensive, highly structured, line-by-line breakdown explaining all parts of the METAR and especially the TAF codes in detailed, sequential sections. List raw code segments and explain every element in detail. Conclude with a checkride Q&A."
-    )
+
     
     pertinent_information: str = Field(
         description="Critical ATC takeaways (e.g., 'Wind shear reported on final approach', 'ILS approaches required', 'Runway 01R likely in use', 'TEMPO hazards exist'). STRICT RULE: Never name specific active runway numbers unless they are explicitly present in the provided list of actual runways for the airport. If the list is unavailable, state only general wind alignment (e.g., 'wind favors runways aligned with the southeast') or omit naming active runways entirely."
@@ -164,13 +161,7 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
    - If ALL minimums met → Return "GO" with confidence level
    - If borderline → Return "MARGINAL - CONSULT INSTRUCTOR"
 
-3. EDUCATIONAL INSIGHTS (TEACHING VALUE):
-   - You MUST generate a brief, high-value educational insight about a key weather parameter or hazard present in this report.
-   - Keep it to 2-3 clear, educational sentences.
-   - Conclude at the end of the insights with ONE mock private pilot checkride oral exam question and answer based on this SPECIFIC weather. Format it clearly as:
-     "**Checkride Q:** [challenging checkride question about a code or safety implication in this report]\n**Checkride A:** [complete, accurate checkride answer]"
-
-4. PERTINENT ATC INFORMATION:
+3. PERTINENT ATC INFORMATION:
    - Note anything requiring Air Traffic Controller attention
    - Identify likely active runway based on wind direction ONLY if the actual runway list of the airport is provided in the prompt. Match the current wind direction with one of the actual runways.
    - STRICT RUNWAY RULE: If no runway list is provided, or the list is empty/unavailable, you MUST NOT guess, invent, or state specific runway numbers (e.g. do not say "Runway 14 is likely active" just because the wind is 140 degrees). Instead, state only the general wind alignment orientation (e.g., "Wind favors runways aligned with the southeast") or omit naming an active runway entirely.
@@ -178,15 +169,15 @@ CRITICAL RULES - MUST FOLLOW EXACTLY
    - Note if instrument approaches (ILS, RNAV) would be required
    - Identify any NOTAM-worthy conditions
 
-5. TEXT FORMATTING STANDARDS:
+4. TEXT FORMATTING STANDARDS:
     - Use conversational, professional aviation language
     - Write out all units: "knots" NOT "KT", "miles" NOT "SM", "feet" NOT "FT"
     - Write temperatures as "25 degrees Celsius" NOT "25°C"
     - Write altimeter/QNH settings exactly in their reported units: use "Altimeter 30.02 inches of mercury" for North American 'A' settings, and "QNH 1013 hectopascals" for international 'Q' settings (do NOT convert between units or map hectopascals into inches of mercury).
-    - Never use raw METAR codes in output (except in educational section where explaining them)
+    - Never use raw METAR codes in output
     - Be concise but thorough - aim for 3-5 sentences per field
 
-6. MISSING DATA HANDLING:
+5. MISSING DATA HANDLING:
    - If TAF is not available or incomplete, state "TAF data unavailable for this station" in forecast_trend
    - Never fabricate weather data
    - If uncertain about any value, note the uncertainty
@@ -590,7 +581,6 @@ Output this JSON structure (replace values with your analysis):
   "flight_category": "VFR or MVFR or IFR or LIFR",
   "forecast_trend": "TAF summary or No TAF available",
   "flight_recommendation": "Go or No-Go for student pilot with brief reason",
-  "educational_insights": "one teaching point from this weather",
   "pertinent_information": "important ATC operational notes"
 }}
 
@@ -783,11 +773,7 @@ def _basic_metar_parse(raw_metar: str, raw_taf: str = None) -> Dict[str, Any]:
             "Cannot provide safety recommendation without AI interpretation. "
             "Student pilots must consult a certified flight instructor or official weather briefing."
         ),
-        "educational_insights": (
-            "⚠️ TEACHING MODE OFFLINE - AI services currently unavailable. "
-            "Review the raw METAR manually with your instructor. "
-            "Key elements to discuss: wind speed/direction, visibility, cloud ceilings, and any significant weather codes present."
-        ),
+
         "pertinent_information": (
             "⚠️ BASIC AUTOMATED ANALYSIS ONLY. "
             "Verify all information with official aviation weather sources before flight. "

@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 > **"Finally understand METAR & TAF reports without your CFI."** 
-> An advanced, AI-powered weather decoding, safety-assessment, and educational platform built specifically for student pilots and flight instructors.
+> An advanced, AI-powered weather decoding and safety-assessment platform built specifically for student pilots and flight instructors.
 
 ### 🌐 **Live Web Application:** [weatherbriefing.streamlit.app](https://weatherbriefing.streamlit.app)
 
@@ -34,10 +34,7 @@ Input an ICAO code and get an immediate, definitive safety decision. The system 
 ### 🎙️ 3. Hands-Free Voice Briefings
 Pre-flight planning should be eyes-free. Synthesize professional audio voice briefs of current and forecast conditions with a single click, allowing pilots to listen while performing pre-flight walkarounds.
 
-### 📚 4. Student Pilot Learning Corner (Checkride Prep)
-Includes a line-by-line interactive explanation of weather abbreviations. Learn exactly what `TEMPO`, `BECMG`, and hazard codes mean, and test your knowledge with a simulated **Private Pilot Checkride Oral Exam Q&A** dynamically generated based on the day's actual weather.
-
-### ⚡ 5. Popular Airport Pre-Caching
+### ⚡ 4. Popular Airport Pre-Caching
 Instant load times for high-traffic global hubs (like VIDP, VABB, KJFK, EGLL, OMDB). Pre-cached weather loads in `< 1ms` with **zero API requests** incurred.
 
 ---

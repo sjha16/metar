@@ -55,7 +55,6 @@ def init_session_state():
         "search_history": [],
         "audio_generated": False,
         "audio_data": None,
-        "show_educational": False,
         "favorite_airports": ["VECC", "VABB", "VIDP", "VOBL", "VOMM"],
         "dark_mode": False,
         "request_count": 0,
@@ -190,15 +189,6 @@ def render_sidebar():
                     st.session_state.icao_input = airport
                     st.session_state.quick_trigger = True
                     st.rerun()
-        
-        st.divider()
-        
-        # Display Options
-        st.markdown("#### ⚙️ Display Options")
-        st.session_state.show_educational = st.toggle(
-            "📚 Show Educational Insights",
-            value=st.session_state.show_educational
-        )
         
         st.divider()
         
@@ -455,37 +445,6 @@ def display_forecast_and_notes(analysis: dict):
         """, unsafe_allow_html=True)
 
 
-def display_educational_insights(analysis: dict):
-    """Display educational insights for student pilots"""
-    
-    if not st.session_state.show_educational:
-        return
-    
-    insights = analysis.get('educational_insights', '')
-    if not insights or insights.startswith('⚠️ TEACHING MODE OFFLINE'):
-        return
-    
-    st.markdown('<p class="section-title">📚 Student Pilot Learning Corner</p>', unsafe_allow_html=True)
-    
-    with st.expander("🎓 View Educational Insights", expanded=True):
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); 
-                    padding: 20px; border-radius: 10px; border: 1px solid #667eea30;">
-            {insights}
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Add quiz interaction
-        if "QUESTION:" in insights.upper():
-            if st.button("📝 Reveal Answer", key="reveal_answer"):
-                # Find the answer part
-                answer_start = insights.upper().find("ANSWER:")
-                if answer_start > 0:
-                    answer = insights[answer_start:]
-                    st.success(answer)
-                else:
-                    st.info("Answer embedded in the insights above")
-
 
 def generate_audio_briefing(analysis: dict):
     """Generate and cache audio briefing"""
@@ -608,10 +567,7 @@ def display_analysis_results():
     # Forecast and Notes
     display_forecast_and_notes(analysis_data)
     
-    st.divider()
-    
-    # Educational Insights (if enabled)
-    display_educational_insights(analysis_data)
+
     
     st.divider()
     
