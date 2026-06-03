@@ -109,58 +109,18 @@ def render_sidebar():
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/airplane-take-off.png", width=80)
         st.markdown("### 🛫 ATC Weather Assistant")
-        st.caption("AI-Powered Pilot?ATC Briefing System")
+        st.caption("Automated Pilot & ATC Briefing System")
         
         st.divider()
         
-        # AI Status Section
-        st.markdown("#### 🤖 AI Engine Status")
+        # Parser Status Section
+        st.markdown("#### ⚙️ Parser Engine Status")
+        st.success("Regex Engine Active ✅")
+        
+        # Cache Stats
         ai_status = get_ai_status()
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            if ai_status.get("gemini_available"):
-                st.success("Gmni ✅")
-            else:
-                st.error("Gmni ❌")
-        
-        with col2:
-            if ai_status.get("openai_available"):
-                st.success("OAI ✅")
-            else:
-                st.error("OAI ❌")
-        
-        with col3:
-            if ai_status.get("groq_available"):
-                st.success("Groq ✅")
-            else:
-                st.error("Groq ❌")
-                
-        with col4:
-            if ai_status.get("deepseek_available"):
-                st.success("Dsk ✅")
-            else:
-                st.error("Dsk ❌")
-        
-        # Rate limit info
-        if ai_status.get("rate_limits"):
-            stats = ai_status["rate_limits"]
-            st.caption(f"Minute calls: {stats.get('calls_this_minute', {})}")
-            st.caption(f"Reset in: {stats.get('seconds_until_reset', 0)}s")
-            
-        # Cache & Queue Stats
         cache_stats = ai_status.get("cache_stats", {"memory_entries": 0, "disk_entries": 0})
         st.caption(f"📦 Cache: {cache_stats.get('memory_entries', 0)} memory / {cache_stats.get('disk_entries', 0)} disk entries")
-        
-        queue_stats = ai_status.get("queue_stats", {"queue_length": 0, "currently_processing": 0, "max_concurrent": 5})
-        q_len = queue_stats.get("queue_length", 0)
-        q_proc = queue_stats.get("currently_processing", 0)
-        q_max = queue_stats.get("max_concurrent", 5)
-        
-        if q_len > 0:
-            st.warning(f"⏳ Queue: {q_len} waiting ({q_proc}/{q_max} active)")
-        else:
-            st.caption(f"🟢 Queue: 0 waiting ({q_proc}/{q_max} active)")
             
         st.divider()
         
@@ -216,7 +176,7 @@ def render_sidebar():
         with col1:
             st.metric("🌍 Airports Covered", "9,500+")
         with col2:
-            st.metric("🤖 AI Models", "4")
+            st.metric("⚙️ Engine", "Regex Parser")
             
         st.metric("💰 Cost to You", "100% Free Forever")
         
@@ -256,7 +216,7 @@ def render_sidebar():
         
         # Footer
         st.caption("Data from aviationweather.gov")
-        st.caption("AI by Gemini, Groq, OpenAI & DeepSeek")
+        st.caption("Regex decoding engine")
         st.caption(f"Session requests: {st.session_state.request_count}")
         
         # Reset button
@@ -314,10 +274,10 @@ def fetch_weather_data(icao: str):
                 st.code(raw_taf if raw_taf else "No TAF", language=None)
                 st.caption("Raw TAF")
     
-    # AI Analysis
-    with st.spinner("🤖 AI analyzing weather patterns (will queue if busy)..."):
+    # Regex Analysis
+    with st.spinner("⚙️ Decoding weather patterns using regex parser..."):
         try:
-            # Directly call orchestrator (which returns a dict and handles caching & queuing)
+            # Directly call orchestrator
             analysis = analyze_metar_orchestrator(raw_metar, raw_taf)
             
             # Format for display
@@ -344,10 +304,8 @@ def fetch_weather_data(icao: str):
             # Show toast feedback
             if analysis.get("from_cache"):
                 st.toast("⚡ Instant result loaded from cache!", icon="🔋")
-            elif analysis.get("fallback_used") and not analysis.get("ai_available", True):
-                st.toast("🚦 High traffic: Basic parsing fallback used.", icon="⚠️")
             else:
-                st.toast("✅ Full AI Weather Briefing Generated!", icon="🤖")
+                st.toast("✅ Weather Briefing Decoded!", icon="⚙️")
                 
             return True
             
@@ -513,23 +471,13 @@ def display_analysis_results():
         st.warning(analysis.get("warning", "⚠️ AI services unavailable - showing basic analysis"))
     
     # Provider badge
-    provider = analysis.get("provider", "unknown")
-    fallback = analysis.get("fallback_used", False)
-    
-    provider_color = {
-        "deepseek": "#0066FF",
-        "gemini": "#4285F4",
-        "groq": "#F50057",
-        "regex_parser": "#FF9800"
-    }
-    
     st.markdown(f"""
-    <span style="background: {provider_color.get(provider, '#gray')}15; 
-                 color: {provider_color.get(provider, '#gray')}; 
+    <span style="background: #FF980015; 
+                 color: #FF9800; 
                  padding: 4px 12px; 
                  border-radius: 12px; 
                  font-size: 0.8rem;">
-        🤖 AI: {provider.upper()} {'(Fallback)' if fallback else ''}
+        ⚙️ Engine: Regex Parser
     </span>
     """, unsafe_allow_html=True)
     
@@ -650,15 +598,9 @@ def main():
         col1, col2, col3 = st.columns([1, 3, 1])
         with col2:
             st.markdown('<h1 class="main-title">🛫 ATC Weather Assistant</h1>', unsafe_allow_html=True)
-            st.caption("AI-Powered Structural Pilot Briefing Sequencer")
+            st.caption("Automated Structural Pilot Briefing Sequencer")
         
         st.divider()
-        
-        # Check AI availability before analysis
-        ai_status = get_ai_status()
-        is_overloaded = not ai_status.get('gemini_available') and not ai_status.get('openai_available') and not ai_status.get('groq_available') and not ai_status.get('deepseek_available')
-        if is_overloaded:
-            show_high_traffic_mode()
         
         # Input section
         input_col1, input_col2, input_col3 = st.columns([2, 1, 1])
@@ -733,8 +675,8 @@ def main():
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.markdown("""
-                ### 🤖 AI Analysis
-                Quad-engine AI (Gemini, Groq, OpenAI & DeepSeek) decodes METAR/TAF into plain English with 
+                ### ⚙️ Regex Parser
+                Deterministic parsing algorithm decodes raw METAR/TAF weather strings into plain English with 
                 student pilot recommendations.
                 """)
             with col2:

@@ -30,59 +30,12 @@ logger = logging.getLogger(__name__)
 
 
 def check_environment():
-    """Verify environment variables are configured"""
+    """Verify environment variables are loaded"""
     from dotenv import load_dotenv
     
     env_path = PROJECT_ROOT / '.env'
-    
-    if not env_path.exists():
-        print("\n⚠️  No .env file found!")
-        print("Creating template .env file...")
-        
-        template = """# Aviation Weather AI - API Keys
-# Get free keys from:
-# Gemini: https://makersuite.google.com/app/apikey
-# Groq: https://console.groq.com
-# OpenAI: https://platform.openai.com
-# DeepSeek: https://platform.deepseek.com
-
-GEMINI_API_KEY=your_gemini_key_here
-GROQ_API_KEY=your_groq_key_here
-OPENAI_API_KEY=your_openai_key_here
-DEEPSEEK_API_KEY=your_deepseek_key_here
-"""
-        env_path.write_text(template)
-        print(f"✅ Created .env template at: {env_path}")
-        print("⚠️  Edit this file with your actual API keys before running.")
-        return False
-    
-    load_dotenv(dotenv_path=env_path)
-    
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    groq_key = os.getenv("GROQ_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-    
-    warnings = []
-    
-    if not gemini_key or "your_gemini_key" in gemini_key:
-        warnings.append("GEMINI_API_KEY not configured")
-    
-    if not groq_key or "your_groq_key" in groq_key:
-        warnings.append("GROQ_API_KEY not configured")
-        
-    if not openai_key or "your_openai_key" in openai_key:
-        warnings.append("OPENAI_API_KEY not configured")
-        
-    if not deepseek_key or "your_deepseek_key" in deepseek_key:
-        warnings.append("DEEPSEEK_API_KEY not configured")
-    
-    if warnings:
-        print("\n⚠️  API Key Warnings:")
-        for warning in warnings:
-            print(f"   - {warning}")
-        print("   The app will run but AI features may be limited.")
-    
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
     return True
 
 
@@ -95,7 +48,7 @@ def run_app():
         sys.exit(1)
     
     print("\n" + "=" * 60)
-    print("🛫  Starting Aviation Weather AI Assistant...")
+    print("🛫  Starting ATC Weather Assistant...")
     print("=" * 60)
     print(f"\n   🌐 Local:    http://localhost:8501")
     print(f"   🌐 Network:  http://0.0.0.0:8501")
@@ -128,9 +81,9 @@ def run_app():
 if __name__ == "__main__":
     print("""
 ╔══════════════════════════════════════════════╗
-║  🛫  AVIATION WEATHER AI ASSISTANT  🛫     ║
-║  AI-Powered METAR/TAF Briefing System       ║
-║  Gemini + Groq + OpenAI + DeepSeek          ║
+║  🛫  ATC METAR & TAF WEATHER ASSISTANT 🛫     ║
+║  Automated METAR/TAF Briefing System         ║
+║  Regex-Powered Parser Only                   ║
 ╚══════════════════════════════════════════════╝
     """)
     
