@@ -318,36 +318,7 @@ def fetch_weather_data(icao: str):
 # DISPLAY FUNCTIONS
 # ============================================
 
-def display_flight_recommendation(recommendation: str):
-    """Display Go/No-Go recommendation with visual badge"""
-    recommendation_upper = recommendation.upper()
-    
-    if "NO-GO" in recommendation_upper:
-        st.markdown("""
-        <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 20px; border-radius: 8px; margin: 10px 0;">
-            <h3 style="color: #991b1b; margin: 0; font-weight: 700;">🔴 NO-GO - Flight Not Recommended</h3>
-            <p style="margin-top: 10px; color: #7f1d1d; margin-bottom: 0; font-size: 1.05rem; line-height: 1.5;">{}</p>
-        </div>
-        """.format(recommendation), unsafe_allow_html=True)
-    
-    elif "GO" in recommendation_upper and "NO-GO" not in recommendation_upper:
-        st.markdown("""
-        <div style="background: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 10px 0;">
-            <h3 style="color: #166534; margin: 0; font-weight: 700;">🟢 GO - Conditions Favorable</h3>
-            <p style="margin-top: 10px; color: #14532d; margin-bottom: 0; font-size: 1.05rem; line-height: 1.5;">{}</p>
-        </div>
-        """.format(recommendation), unsafe_allow_html=True)
-    
-    elif "MARGINAL" in recommendation_upper:
-        st.markdown("""
-        <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 10px 0;">
-            <h3 style="color: #92400e; margin: 0; font-weight: 700;">🟡 MARGINAL - Consult Instructor</h3>
-            <p style="margin-top: 10px; color: #78350f; margin-bottom: 0; font-size: 1.05rem; line-height: 1.5;">{}</p>
-        </div>
-        """.format(recommendation), unsafe_allow_html=True)
-    
-    else:
-        st.info(f"**Flight Assessment:** {recommendation}")
+
 
 
 def display_weather_metrics(analysis: dict):
@@ -515,11 +486,7 @@ def display_analysis_results():
     
     st.divider()
     
-    # Flight Recommendation (Most important!)
-    recommendation = analysis_data.get("flight_recommendation", "")
-    if recommendation:
-        display_flight_recommendation(recommendation)
-        st.divider()
+
     
     # Weather Metrics Grid
     display_weather_metrics(analysis_data)
