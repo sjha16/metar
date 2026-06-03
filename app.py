@@ -466,9 +466,7 @@ def display_analysis_results():
             st.warning(analysis["warning"])
         return
     
-    # Check if AI was available
-    if not analysis.get("ai_available", True):
-        st.warning(analysis.get("warning", "⚠️ AI services unavailable - showing basic analysis"))
+
     
     # Provider badge
     st.markdown(f"""
